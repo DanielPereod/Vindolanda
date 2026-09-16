@@ -45,7 +45,27 @@ type MenuTarget =
   | { kind: "folder"; folderId: string; x: number; y: number }
   | { kind: "empty"; x: number; y: number };
 
-/** Explorador con organización orgánica: arrastra notas a carpetas o usa clic derecho. */
+/** Every folder at or below the given root, used to reject cyclic drag moves. */
+function folderSubtree(folders: NoteFolder[], rootId: string): Set<string> {
+  const result = new Set<string>([rootId]);
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const candidate of folders) {
+      if (
+        candidate.parent_id &&
+        result.has(candidate.parent_id) &&
+        !result.has(candidate.id)
+      ) {
+        result.add(candidate.id);
+        expanded = true;
+      }
+    }
+  }
+  return result;
+}
+
+/** Explorador con organización orgánica: arrastra notas y carpetas o usa clic derecho. */
 export function NoteExplorer({
   notes,
   onSearch,
@@ -62,7 +82,7 @@ export function NoteExplorer({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [moveError, setMoveError] = useState("");
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [activeDrag, setActiveDrag] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const [dialog, setDialog] = useState<ExplorerDialog | null>(null);
   const client = useQueryClient();
@@ -70,6 +90,11 @@ export function NoteExplorer({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
+  const allFolders = folders.data ?? [];
+  const { setNodeRef: setRootNodeRef } = useDroppable({
+    id: "folder:root",
+    data: { type: "folder", folderId: null },
+  });
 
   async function mutate(path: string, method: string, body?: unknown) {
     setBusy(true);
@@ -122,28 +147,73 @@ export function NoteExplorer({
     }
   }
 
+  async function moveFolder(target: NoteFolder, parentId: string | null) {
+    if ((target.parent_id ?? null) === parentId) return;
+    setMoveError("");
+    const previous = allFolders;
+    client.setQueryData<NoteFolder[]>(["/note-folders"], (old) =>
+      old?.map((candidate) =>
+        candidate.id === target.id ? { ...candidate, parent_id: parentId } : candidate,
+      ),
+    );
+    try {
+      const updated = await api<NoteFolder>(
+        `/note-folders/${target.id}`,
+        "PUT",
+        { name: target.name, parent_id: parentId },
+      );
+      client.setQueryData<NoteFolder[]>(["/note-folders"], (old) =>
+        old?.map((candidate) =>
+          candidate.id === updated.id ? updated : candidate,
+        ),
+      );
+    } catch (failure) {
+      client.setQueryData(["/note-folders"], previous);
+      setMoveError(errorMessage(failure));
+    } finally {
+      void client.invalidateQueries({ queryKey: ["/note-folders"] });
+    }
+  }
+
   function dragStart(event: DragStartEvent) {
     const raw = String(event.active.id);
-    if (raw.startsWith("note:")) setActiveNoteId(raw.slice("note:".length));
+    if (raw.startsWith("note:") || raw.startsWith("folder:"))
+      setActiveDrag(raw);
   }
 
   function dragEnd(event: DragEndEvent) {
-    setActiveNoteId(null);
-    const rawActive = String(event.active.id);
-    if (!rawActive.startsWith("note:") || !event.over) return;
-    const noteId = rawActive.slice("note:".length);
+    setActiveDrag(null);
+    if (!event.over) return;
     const rawOver = String(event.over.id);
     if (!rawOver.startsWith("folder:")) return;
-    const folderId =
+    const parentId =
       rawOver === "folder:root" ? null : rawOver.slice("folder:".length);
-    const target = notes.find((note) => note.id === noteId);
-    if (!target) return;
-    void moveNote(target, folderId);
+    const rawActive = String(event.active.id);
+    if (rawActive.startsWith("note:")) {
+      const target = notes.find(
+        (note) => note.id === rawActive.slice("note:".length),
+      );
+      if (target) void moveNote(target, parentId);
+      return;
+    }
+    if (rawActive.startsWith("folder:")) {
+      const folderId = rawActive.slice("folder:".length);
+      const target = allFolders.find((folder) => folder.id === folderId);
+      if (!target) return;
+      if (parentId !== null && folderSubtree(allFolders, folderId).has(parentId))
+        return;
+      void moveFolder(target, parentId);
+    }
   }
 
-  const allFolders = folders.data ?? [];
-  const activeNote = activeNoteId
-    ? (notes.find((note) => note.id === activeNoteId) ?? null)
+  const activeNote = activeDrag?.startsWith("note:")
+    ? (notes.find((note) => note.id === activeDrag.slice("note:".length)) ??
+      null)
+    : null;
+  const activeFolder = activeDrag?.startsWith("folder:")
+    ? (allFolders.find(
+        (folder) => folder.id === activeDrag.slice("folder:".length),
+      ) ?? null)
     : null;
 
   function openMenu(target: MenuTarget) {
@@ -412,10 +482,11 @@ export function NoteExplorer({
     <DndContext
       sensors={sensors}
       onDragStart={dragStart}
-      onDragCancel={() => setActiveNoteId(null)}
+      onDragCancel={() => setActiveDrag(null)}
       onDragEnd={dragEnd}
     >
       <div
+        ref={setRootNodeRef}
         className="note-explorer"
         onContextMenu={(event) => {
           const interactive = (event.target as HTMLElement).closest(
@@ -483,9 +554,14 @@ export function NoteExplorer({
           </p>
         )}
         {entries(null)}
-        {activeNoteId && <RootDropZone />}
         <DragOverlay dropAnimation={null}>
-          {activeNote ? (
+          {activeFolder ? (
+            <div className="explorer-drag-preview">
+              <GripVertical size={14} />
+              <FolderOpen size={14} />
+              <span>{activeFolder.name}</span>
+            </div>
+          ) : activeNote ? (
             <div className="explorer-drag-preview">
               <GripVertical size={14} />
               <FileText size={14} />
@@ -717,23 +793,6 @@ function DraggableNote({
   );
 }
 
-function RootDropZone() {
-  const { setNodeRef, isOver } = useDroppable({
-    id: "folder:root",
-    data: { type: "folder", folderId: null },
-  });
-  return (
-    <div
-      ref={setNodeRef}
-      className={`explorer-root-drop${isOver ? " is-over" : ""}`}
-      aria-label="Soltar aquí para quitar de carpeta"
-      title="Arrastra aquí para dejar sin carpeta"
-    >
-      Suelta aquí para quitar de la carpeta
-    </div>
-  );
-}
-
 function FolderBranch({
   folder,
   children,
@@ -744,7 +803,16 @@ function FolderBranch({
   onContextMenu: (event: React.MouseEvent) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef: setDropNodeRef, isOver } = useDroppable({
+    id: `folder:${folder.id}`,
+    data: { type: "folder", folderId: folder.id },
+  });
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragNodeRef,
+    isDragging,
+  } = useDraggable({
     id: `folder:${folder.id}`,
     data: { type: "folder", folderId: folder.id },
   });
@@ -753,14 +821,19 @@ function FolderBranch({
   }, [isOver]);
   return (
     <div
-      ref={setNodeRef}
-      className={`folder-branch${isOver ? " is-over" : ""}`}
+      ref={setDropNodeRef}
+      className={`folder-branch${isOver ? " is-over" : ""}${
+        isDragging ? " is-dragging" : ""
+      }`}
     >
       <div
+        ref={setDragNodeRef}
         className="folder-heading"
         id={`folder-heading-${folder.id}`}
         onContextMenu={onContextMenu}
-        title="Clic derecho para opciones"
+        title="Arrastra para mover · Clic derecho para opciones"
+        {...listeners}
+        {...attributes}
       >
         <button aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -833,25 +906,13 @@ function ExplorerContextMenu({
         ? (note?.folder_id ?? null)
         : null;
 
-  const descendants = useMemo(() => {
-    if (target.kind !== "folder") return new Set<string>();
-    const result = new Set<string>([target.folderId]);
-    let expanded = true;
-    while (expanded) {
-      expanded = false;
-      for (const candidate of folders) {
-        if (
-          candidate.parent_id &&
-          result.has(candidate.parent_id) &&
-          !result.has(candidate.id)
-        ) {
-          result.add(candidate.id);
-          expanded = true;
-        }
-      }
-    }
-    return result;
-  }, [folders, target]);
+  const descendants = useMemo(
+    () =>
+      target.kind === "folder"
+        ? folderSubtree(folders, target.folderId)
+        : new Set<string>(),
+    [folders, target],
+  );
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {

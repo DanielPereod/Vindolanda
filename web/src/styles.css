@@ -1475,11 +1475,16 @@ details p {
   font-size: 13px;
 }
 .explorer-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 2px 0 10px;
+  margin: 0;
+  padding: 18px 0 10px;
+  background: var(--sidebar);
 }
 .explorer-title {
   font-size: 10px;
@@ -1699,19 +1704,8 @@ details p {
   font-size: 11px;
   color: #9a9a9a;
 }
-.explorer-root-drop {
-  margin-top: 10px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-}
-.explorer-root-drop.is-over {
-  border-color: var(--accent);
-  background: var(--soft);
-  color: var(--text);
+.notes-sidebar .note-explorer {
+  flex-grow: 1;
 }
 .folder-branch.is-over > .folder-heading {
   background: var(--soft);
@@ -1754,6 +1748,14 @@ details p {
 .folder-heading {
   display: flex;
   align-items: center;
+  border-radius: 6px;
+  cursor: grab;
+}
+.folder-heading:active {
+  cursor: grabbing;
+}
+.folder-branch.is-dragging > .folder-heading {
+  opacity: 0.4;
 }
 .folder-heading > button:first-child {
   flex: 1;
@@ -2057,7 +2059,7 @@ details p {
   color: var(--muted);
 }
 .notes-shell .notes-sidebar {
-  padding: 18px 12px 0;
+  padding: 0 12px 0;
 }
 .notes-shell .notes-sidebar > a {
   padding: 7px 10px;
@@ -2094,7 +2096,7 @@ details p {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 18px 12px 0;
+  padding: 0 12px 0;
   background: var(--sidebar);
   border-right: 1px solid var(--line);
   z-index: 20;
@@ -5254,4 +5256,48 @@ button.linked-task {
 }
 .food-picker-option:hover {
   background: color-mix(in srgb, var(--accent, #15836b) 12%, transparent);
+}
+
+/* Nutrición: progreso corporal */
+.weight-card {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 16px;
+  margin: 20px 0;
+  background: var(--panel);
+}
+.weight-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.weight-chart {
+  width: 100%;
+  height: 140px;
+  color: var(--accent, #15836b);
+}
+.weight-chart path {
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.measurement-list {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  display: grid;
+  gap: 6px;
+}
+.measurement-list li {
+  display: grid;
+  grid-template-columns: 110px 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.measurement-date {
+  font-weight: 600;
 }

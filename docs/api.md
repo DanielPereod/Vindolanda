@@ -209,4 +209,11 @@ Item nutrition is computed from the referenced recipe per-serving values or the 
 
 The list is a derived convenience, not a source of truth. "Create a task with the pending items" is done by the client through the existing tasks API, keeping the nutrition domain free of task dependencies.
 
-Phase 2 adds body progress (weight and measurements).
+### Body progress
+
+- `GET /api/v1/nutrition/measurements`: list body measurements newest first.
+- `POST /api/v1/nutrition/measurements`: create `{measured_on,weight_kg,body_fat_pct,waist_cm,hip_cm,chest_cm,neck_cm,arm_cm,thigh_cm,notes}` (201). The date is unique, so a duplicate returns 409, and at least one metric is required (422 otherwise).
+- `PATCH /api/v1/nutrition/measurements/{id}`: replace the editable fields (200).
+- `DELETE /api/v1/nutrition/measurements/{id}`: remove a measurement (204).
+
+Metric values are bounded to 0–1000 (body fat to 100) and notes to 500 bytes. The browser draws a weight sparkline from the entries that include a weight.

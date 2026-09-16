@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import type { Note, NoteInput, NoteFolder, NoteLink } from "../src/notes";
 import type { TaskInput } from "../src/types";
 
@@ -102,6 +102,21 @@ test.beforeEach(async ({ page }) => {
       const folder = { ...input, id: crypto.randomUUID() };
       folders.push(folder);
       await route.fulfill({ status: 201, json: folder });
+      return;
+    }
+    if (path.startsWith("/note-folders/") && method === "PUT") {
+      const index = folders.findIndex((folder) => folder.id === path.split("/")[2]);
+      const current = folders[index];
+      if (!current) throw new Error("Unknown folder");
+      const updated = {
+        ...current,
+        ...(route.request().postDataJSON() as Pick<
+          NoteFolder,
+          "name" | "parent_id"
+        >),
+      };
+      folders[index] = updated;
+      await route.fulfill({ json: updated });
       return;
     }
     if (
@@ -261,7 +276,7 @@ test("folders, trash and restoration preserve notes and their identity", async (
     .getByRole("button", { name: "Crear carpeta", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Research", exact: true }),
+    page.locator(".folder-heading", { hasText: "Research" }).first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Nota", exact: true }).click();
   await page
@@ -307,6 +322,59 @@ test("folders, trash and restoration preserve notes and their identity", async (
       .getByRole("link", { name: "Organized idea" }),
   ).toBeVisible();
 });
+
+test("folders drag into other folders and back to the root", async ({
+  page,
+}) => {
+  await page.goto("/notes");
+  for (const name of ["Research", "Archive"]) {
+    await page.getByRole("button", { name: "Carpeta", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "Nombre de la carpeta", exact: true })
+      .fill(name);
+    await page
+      .getByRole("button", { name: "Crear carpeta", exact: true })
+      .click();
+    await expect(
+      page.locator(".folder-heading", { hasText: name }).first(),
+    ).toBeVisible();
+  }
+  await drag(
+    page,
+    page.locator(".folder-heading", { hasText: "Archive" }).first(),
+    page.locator(".folder-heading", { hasText: "Research" }).first(),
+  );
+  const nested = page
+    .locator(".folder-branch", { hasText: "Research" })
+    .locator(".folder-children .folder-heading", { hasText: "Archive" });
+  await expect(nested).toBeVisible();
+  // Soltar en el área vacía del explorador devuelve la carpeta a la raíz.
+  await drag(
+    page,
+    page.locator(".folder-heading", { hasText: "Archive" }).first(),
+    page.locator(".note-explorer"),
+  );
+  await expect(nested).toHaveCount(0);
+});
+
+async function drag(page: Page, source: Locator, target: Locator) {
+  await source.hover();
+  const sourceBounds = await source.boundingBox();
+  if (!sourceBounds) throw new Error("Drag source must be visible");
+  const sourceX = sourceBounds.x + sourceBounds.width / 2;
+  const sourceY = sourceBounds.y + sourceBounds.height / 2;
+  await page.mouse.move(sourceX, sourceY);
+  await page.mouse.down();
+  await page.mouse.move(sourceX + 12, sourceY + 4, { steps: 4 });
+  const targetBounds = await target.boundingBox();
+  if (!targetBounds) throw new Error("Drag target must be visible");
+  await page.mouse.move(
+    targetBounds.x + targetBounds.width / 2,
+    targetBounds.y + targetBounds.height / 2,
+    { steps: 12 },
+  );
+  await page.mouse.up();
+}
 
 test("renamed links display the new title and navigate by original identity", async ({
   page,

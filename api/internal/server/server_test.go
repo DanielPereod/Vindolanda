@@ -61,7 +61,7 @@ func TestMVP(testingContext *testing.T) {
 	if operationError := server.Migrate(context.Background(), databaseURL); operationError != nil {
 		testingContext.Fatal(operationError)
 	}
-	if _, operationError := pool.Exec(context.Background(), "TRUNCATE users,projects,labels,notes,foods,recipes,meal_plans,shopping_items CASCADE"); operationError != nil {
+	if _, operationError := pool.Exec(context.Background(), "TRUNCATE users,projects,labels,notes,foods,recipes,meal_plans,shopping_items,body_measurements CASCADE"); operationError != nil {
 		testingContext.Fatal(operationError)
 	}
 	if operationError := server.Provision(context.Background(), pool, "owner", "a-long-test-password"); operationError != nil {
@@ -364,6 +364,16 @@ func TestMVP(testingContext *testing.T) {
 		testingContext.Fatal("regeneration did not mark the recipe source")
 	}
 	request("POST", "/api/v1/nutrition/shopping/generate", `{}`, 422)
+	measurement := request("POST", "/api/v1/nutrition/measurements", `{"measured_on":"2026-09-16","weight_kg":72.5,"body_fat_pct":18.2,"waist_cm":80,"notes":"inicio"}`, 201)
+	measurementID := idOf(measurement)
+	request("POST", "/api/v1/nutrition/measurements", `{"measured_on":"2026-09-16","weight_kg":73}`, 409)
+	request("POST", "/api/v1/nutrition/measurements", `{"measured_on":"2026-09-17"}`, 422)
+	request("PATCH", "/api/v1/nutrition/measurements/"+measurementID, `{"measured_on":"2026-09-16","weight_kg":72,"body_fat_pct":18}`, 200)
+	if !bytes.Contains(request("GET", "/api/v1/nutrition/measurements", "", 200), []byte(`"weight_kg":72`)) {
+		testingContext.Fatal("body measurement edit did not persist")
+	}
+	request("DELETE", "/api/v1/nutrition/measurements/"+measurementID, "", 204)
+	request("DELETE", "/api/v1/nutrition/measurements/"+measurementID, "", 404)
 	request("DELETE", "/api/v1/nutrition/plans/"+planID, "", 204)
 	request("DELETE", "/api/v1/nutrition/foods/"+importedID, "", 422)
 	request("DELETE", "/api/v1/nutrition/recipes/"+recipeID, "", 204)

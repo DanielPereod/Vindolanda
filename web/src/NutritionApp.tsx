@@ -4,6 +4,7 @@ import {
   ChefHat,
   ShoppingCart,
   Target,
+  TrendingUp,
   Utensils,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -16,6 +17,7 @@ import { DiaryPage } from "./DiaryPage";
 import { FoodsPage } from "./FoodsPage";
 import { PlanPage } from "./PlanPage";
 import { ProfilePage } from "./ProfilePage";
+import { ProgressPage } from "./ProgressPage";
 import { RecipesPage } from "./RecipesPage";
 import { ShoppingPage } from "./ShoppingPage";
 
@@ -58,6 +60,10 @@ export function NutritionApp() {
             <ShoppingCart size={18} />
             Lista de la compra
           </NavLink>
+          <NavLink to="/nutrition/progress">
+            <TrendingUp size={18} />
+            Progreso
+          </NavLink>
           <NavLink to="/nutrition/profile">
             <Target size={18} />
             Perfil y objetivos
@@ -86,6 +92,8 @@ export function NutritionApp() {
             <PlanPage />
           ) : path.startsWith("/nutrition/shopping") ? (
             <ShoppingPage />
+          ) : path.startsWith("/nutrition/progress") ? (
+            <ProgressPage />
           ) : path.startsWith("/nutrition/profile") ? (
             <ProfilePage />
           ) : (

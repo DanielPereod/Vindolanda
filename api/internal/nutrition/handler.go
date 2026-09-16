@@ -25,6 +25,7 @@ func Register(router chi.Router, pool *pgxpool.Pool, client OpenFoodFactsClient)
 	registerRecipes(router, pool)
 	registerPlans(router, pool)
 	registerShopping(router, pool)
+	registerMeasurements(router, pool)
 }
 
 func saveProfile(writer http.ResponseWriter, request *http.Request, pool *pgxpool.Pool) {

@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import type {
+  BodyMeasurement,
+  BodyMeasurementInput,
   DiaryDay,
   DiaryEntry,
   DiaryTotals,
@@ -24,6 +26,7 @@ interface State {
   diary: DiaryEntry[];
   water: number;
   shopping: ShoppingItem[];
+  measurements: BodyMeasurement[];
   product: OpenFoodFactsProduct | null;
 }
 
@@ -227,7 +230,29 @@ function defaultState(): State {
     diary: [],
     water: 0,
     shopping: [],
+    measurements: [],
     product: null,
+  };
+}
+
+function makeMeasurement(
+  measuredOn: string,
+  weightKg: number,
+): BodyMeasurement {
+  return {
+    id: crypto.randomUUID(),
+    measured_on: measuredOn,
+    weight_kg: weightKg,
+    body_fat_pct: null,
+    waist_cm: null,
+    hip_cm: null,
+    chest_cm: null,
+    neck_cm: null,
+    arm_cm: null,
+    thigh_cm: null,
+    notes: "",
+    created_at: now(),
+    updated_at: now(),
   };
 }
 
@@ -367,6 +392,25 @@ async function installApi(page: Page, state: State): Promise<void> {
     }
     if (path === "/nutrition/shopping" && method === "GET") {
       await route.fulfill({ json: state.shopping });
+      return;
+    }
+    if (path === "/nutrition/measurements" && method === "GET") {
+      await route.fulfill({
+        json: [...state.measurements].sort((left, right) =>
+          left.measured_on < right.measured_on ? 1 : -1,
+        ),
+      });
+      return;
+    }
+    if (path === "/nutrition/measurements" && method === "POST") {
+      const measurement: BodyMeasurement = {
+        id: crypto.randomUUID(),
+        ...body<BodyMeasurementInput>(),
+        created_at: now(),
+        updated_at: now(),
+      };
+      state.measurements.push(measurement);
+      await route.fulfill({ status: 201, json: measurement });
       return;
     }
     if (path === "/tasks" && method === "POST") {
@@ -586,4 +630,19 @@ test("la lista de la compra se genera desde el plan y crea una tarea", async ({
     .getByRole("button", { name: "Crear tarea con lo pendiente" })
     .click();
   await expect(page.getByText("Tarea creada con la lista")).toBeVisible();
+});
+
+test("el progreso registra el peso y dibuja la evolución", async ({ page }) => {
+  state.measurements.push(
+    makeMeasurement("2026-09-01", 80),
+    makeMeasurement("2026-09-08", 79),
+  );
+  await page.goto("/nutrition/progress");
+  await expect(
+    page.getByRole("img", { name: "Gráfica de peso" }),
+  ).toBeVisible();
+  await expect(page.getByText("80 → 79 kg")).toBeVisible();
+  await page.getByLabel("Peso (kg)").fill("78.5");
+  await page.getByRole("button", { name: "Guardar medida" }).click();
+  await expect(page.getByText("Medida guardada")).toBeVisible();
 });

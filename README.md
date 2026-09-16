@@ -160,8 +160,9 @@ Use the application switcher to move between Tasks, Notes and Nutrition.
 - **Recetas:** ingredients from the catalog with macros computed automatically, per-serving values, Markdown steps, tags and **Cocinar** to add several servings to the diary.
 - **Plan semanal:** a Monday-based week with meals per day, reusable templates, copy week, save week as template and **Pasar el día al diario** (idempotent per planned item).
 - **Lista de la compra:** generated from the week plan or a recipe by summing ingredients, editable, with check-off and **Crear tarea con lo pendiente** through the tasks API.
+- **Progreso:** body measurements per day (weight, body fat and circumference), a weight evolution sparkline and a deletable history.
 
-Migrations `00009_nutrition.sql` through `00015_shopping.sql` add the profile, foods, diary, recipes, meal plans and shopping list. Phase 2 adds body progress (weight and measurements). See [the nutrition plan](docs/nutrition-plan.md).
+Migrations `00009_nutrition.sql` through `00017_measurements.sql` add the profile, foods, diary, recipes, meal plans, shopping list and body measurements. See [the nutrition plan](docs/nutrition-plan.md).
 
 Run the isolated nutrition browser checks without application credentials:
 

@@ -200,6 +200,24 @@ export interface ShoppingItem extends ShoppingInput {
   created_at: string;
   updated_at: string;
 }
+/** Medida corporal de un día; los campos ausentes llegan como null. */
+export interface BodyMeasurementInput {
+  measured_on: string;
+  weight_kg: number | null;
+  body_fat_pct: number | null;
+  waist_cm: number | null;
+  hip_cm: number | null;
+  chest_cm: number | null;
+  neck_cm: number | null;
+  arm_cm: number | null;
+  thigh_cm: number | null;
+  notes: string;
+}
+export interface BodyMeasurement extends BodyMeasurementInput {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
 export interface Project {
   id: string;
   name: string;
