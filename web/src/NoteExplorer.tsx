@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +24,7 @@ import {
   Link2,
   Network,
   Pencil,
+  RotateCcw,
   Search,
   Table2,
   Trash2,
@@ -91,10 +92,6 @@ export function NoteExplorer({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
   const allFolders = folders.data ?? [];
-  const { setNodeRef: setRootNodeRef } = useDroppable({
-    id: "folder:root",
-    data: { type: "folder", folderId: null },
-  });
 
   async function mutate(path: string, method: string, body?: unknown) {
     setBusy(true);
@@ -153,7 +150,9 @@ export function NoteExplorer({
     const previous = allFolders;
     client.setQueryData<NoteFolder[]>(["/note-folders"], (old) =>
       old?.map((candidate) =>
-        candidate.id === target.id ? { ...candidate, parent_id: parentId } : candidate,
+        candidate.id === target.id
+          ? { ...candidate, parent_id: parentId }
+          : candidate,
       ),
     );
     try {
@@ -200,7 +199,10 @@ export function NoteExplorer({
       const folderId = rawActive.slice("folder:".length);
       const target = allFolders.find((folder) => folder.id === folderId);
       if (!target) return;
-      if (parentId !== null && folderSubtree(allFolders, folderId).has(parentId))
+      if (
+        parentId !== null &&
+        folderSubtree(allFolders, folderId).has(parentId)
+      )
         return;
       void moveFolder(target, parentId);
     }
@@ -486,7 +488,6 @@ export function NoteExplorer({
       onDragEnd={dragEnd}
     >
       <div
-        ref={setRootNodeRef}
         className="note-explorer"
         onContextMenu={(event) => {
           const interactive = (event.target as HTMLElement).closest(
@@ -553,7 +554,7 @@ export function NoteExplorer({
             <button onClick={() => void folders.refetch()}>Reintentar</button>
           </p>
         )}
-        {entries(null)}
+        <RootDropZone>{entries(null)}</RootDropZone>
         <DragOverlay dropAnimation={null}>
           {activeFolder ? (
             <div className="explorer-drag-preview">
@@ -771,24 +772,43 @@ function DraggableNote({
     id: `note:${note.id}`,
     data: { type: "note", noteId: note.id },
   });
+  const navigate = useNavigate();
+  const location = useLocation();
+  const active = location.pathname === `/notes/${note.id}`;
   return (
-    <div
+    <button
       ref={setNodeRef}
-      className={`explorer-note-row${isDragging ? " is-dragging" : ""}`}
+      type="button"
+      className={`explorer-note-row${active ? " active" : ""}${
+        isDragging ? " is-dragging" : ""
+      }`}
       title="Arrastra para mover · Clic derecho para opciones"
+      aria-current={active ? "page" : undefined}
       onContextMenu={onContextMenu}
+      onClick={(event) => {
+        if (isDragging) {
+          event.preventDefault();
+          return;
+        }
+        navigate(`/notes/${note.id}`);
+      }}
       {...listeners}
       {...attributes}
     >
-      <NavLink
-        to={`/notes/${note.id}`}
-        className="explorer-note"
-        onClick={(event) => {
-          if (isDragging) event.preventDefault();
-        }}
-      >
-        <span>{note.title}</span>
-      </NavLink>
+      <span>{note.title}</span>
+    </button>
+  );
+}
+
+/** Root target: dropping on it (empty area or a top-level row) detaches items from their parent. */
+function RootDropZone({ children }: { children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({
+    id: "folder:root",
+    data: { type: "folder", folderId: null },
+  });
+  return (
+    <div ref={setNodeRef} className="explorer-root-drop">
+      {children}
     </div>
   );
 }
@@ -1267,30 +1287,86 @@ export function NoteTrash({
       setPending(false);
     }
   }
+  const kindIcons = { note: FileText, base: Table2, canvas: Network } as const;
   return (
     <section className="note-trash">
-      <h1>Papelera</h1>
-      <p>Las notas conservan su identidad y sus enlaces al restaurarlas.</p>
-      {error && <p role="alert">{error}</p>}
-      {query.isError && <p role="alert">No se pudo cargar la papelera.</p>}
-      {query.isPending && <p>Cargando…</p>}
-      {query.data?.length === 0 && <p>La papelera está vacía.</p>}
-      {Boolean(query.data?.length) && (
-        <button disabled={pending} onClick={() => setPurgeTarget(null)}>
-          Vaciar papelera
-        </button>
+      <header className="note-trash-header">
+        <h1>Papelera</h1>
+        <p className="muted">
+          Las notas conservan su identidad y sus enlaces al restaurarlas.
+        </p>
+      </header>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
       )}
-      {query.data?.map((note) => (
-        <div key={note.id}>
-          <span>{note.title}</span>
-          <button disabled={pending} onClick={() => void restore(note.id)}>
-            Restaurar {note.title}
-          </button>
-          <button disabled={pending} onClick={() => setPurgeTarget(note.id)}>
-            Eliminar definitivamente {note.title}
+      {query.isError && (
+        <p role="alert" className="error">
+          No se pudo cargar la papelera.
+        </p>
+      )}
+      {query.isPending && <p className="note-trash-empty">Cargando…</p>}
+      {query.data?.length === 0 && (
+        <p className="note-trash-empty">La papelera está vacía.</p>
+      )}
+      {Boolean(query.data?.length) && (
+        <div className="note-trash-toolbar">
+          <button
+            type="button"
+            className="danger-button"
+            disabled={pending}
+            onClick={() => setPurgeTarget(null)}
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            Vaciar papelera
           </button>
         </div>
-      ))}
+      )}
+      <ul className="note-trash-list">
+        {query.data?.map((note) => {
+          const Icon = kindIcons[note.kind] ?? FileText;
+          return (
+            <li key={note.id} className="note-trash-item">
+              <span className="note-trash-icon" aria-hidden="true">
+                <Icon size={16} />
+              </span>
+              <div className="note-trash-meta">
+                <span className="note-trash-title" title={note.title}>
+                  {note.title}
+                </span>
+                <span className="note-trash-facts">
+                  {note.deleted_at
+                    ? `Eliminada el ${new Date(note.deleted_at).toLocaleDateString("es-ES")}`
+                    : "Eliminada"}
+                </span>
+              </div>
+              <div className="note-trash-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={pending}
+                  aria-label={`Restaurar ${note.title}`}
+                  onClick={() => void restore(note.id)}
+                >
+                  <RotateCcw size={14} aria-hidden="true" />
+                  Restaurar
+                </button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  disabled={pending}
+                  aria-label={`Eliminar definitivamente ${note.title}`}
+                  onClick={() => setPurgeTarget(note.id)}
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                  Eliminar definitivamente
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
       {purgeTarget !== undefined && (
         <ExplorerConfirmDialog
           title={purgeTarget ? "Eliminar definitivamente" : "Vaciar papelera"}

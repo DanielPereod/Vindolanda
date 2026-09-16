@@ -1056,6 +1056,20 @@ legend {
 .settings-card > .primary {
   align-self: flex-end;
 }
+.settings-page {
+  max-width: 760px;
+}
+.settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  color: var(--text);
+  text-decoration: none;
+}
+.settings-link:hover {
+  background: var(--soft);
+}
 .markdown {
   background: var(--sidebar);
   border-radius: 6px;
@@ -1561,38 +1575,46 @@ details p {
   max-width: 100%;
   white-space: nowrap;
 }
-.explorer-note {
+.explorer-note-row {
   display: flex;
-  gap: 6px;
   align-items: center;
+  gap: 6px;
+  width: 100%;
   padding: 4px 7px;
+  border: 0;
+  background: transparent;
   color: inherit;
-  text-decoration: none;
+  font: inherit;
+  text-align: left;
   border-radius: 4px;
-  flex: 1;
-  min-width: 0;
+  cursor: grab;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    color 120ms ease;
 }
-.explorer-note span {
+.explorer-note-row span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.explorer-note.active {
-  background: var(--soft);
-  color: var(--accent);
-}
-.explorer-note-row {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  border-radius: 4px;
-  cursor: grab;
-}
 .explorer-note-row:active {
   cursor: grabbing;
 }
-.explorer-note-row:hover {
+.explorer-note-row:hover,
+.explorer-note-row:focus-visible {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+.explorer-note-row.active {
   background: var(--soft);
+  color: var(--accent);
+}
+.explorer-note-row.active:hover,
+.explorer-note-row.active:focus-visible {
+  background: var(--accent-soft);
 }
 .explorer-note-row.is-dragging {
   opacity: 0.4;
@@ -1706,6 +1728,12 @@ details p {
 }
 .notes-sidebar .note-explorer {
   flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+.explorer-root-drop {
+  flex: 1 0 auto;
+  min-height: 24px;
 }
 .folder-branch.is-over > .folder-heading {
   background: var(--soft);
@@ -1779,16 +1807,95 @@ details p {
   margin-left: 13px;
 }
 .note-trash {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   max-width: 800px;
   margin: 30px auto;
+  padding: 0 4px;
 }
-.note-trash > div {
+.note-trash-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.note-trash-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+.note-trash-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.note-trash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.note-trash-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--line);
-  padding: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px 14px;
+}
+.note-trash-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--muted);
+}
+.note-trash-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+.note-trash-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.note-trash-facts {
+  font-size: 11px;
+  color: var(--muted);
+}
+.note-trash-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.note-trash .danger-button,
+.note-trash .secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .note-trash-item {
+    flex-wrap: wrap;
+  }
+  .note-trash-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 .document-tabs {
   display: flex;
@@ -4887,7 +4994,6 @@ button.linked-task {
   color: var(--accent);
 }
 
-
 /* Nutrición: diario del día */
 .diary-date-nav {
   display: flex;
@@ -5300,4 +5406,23 @@ button.linked-task {
 }
 .measurement-date {
   font-weight: 600;
+}
+
+/* Recetas: acciones de cabecera e importación desde URL */
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 17px;
+  flex-wrap: wrap;
+}
+.heading-actions .add-main {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .heading-actions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: 10px;
+  }
 }

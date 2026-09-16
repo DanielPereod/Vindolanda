@@ -148,6 +148,26 @@ export interface RecipeInput {
   favorite: boolean;
   ingredients: RecipeIngredientInput[];
 }
+/** Ingrediente leído de una web, con su alimento de catálogo si se encontró. */
+export interface DraftIngredient {
+  raw: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  food_id: string;
+  food_name: string;
+  base_unit: string;
+}
+/** Receta importada desde una URL, lista para revisar en el formulario. */
+export interface RecipeDraft {
+  source_url: string;
+  name: string;
+  description: string;
+  prep_minutes: number;
+  servings: number;
+  tags: string[];
+  ingredients: DraftIngredient[];
+}
 /** Comida planificada dentro de una semana o plantilla. */
 export interface PlanItem {
   id: string;

@@ -184,6 +184,9 @@ Meals are `breakfast`, `lunch`, `dinner` or `snack`. `quantity` must be positive
 - `GET /api/v1/nutrition/recipes/{id}` and `PATCH /api/v1/nutrition/recipes/{id}`: fetch or update a recipe; ingredients are replaced as a whole.
 - `DELETE /api/v1/nutrition/recipes/{id}`: delete the recipe and its ingredients (204).
 - `POST /api/v1/nutrition/recipes/{id}/cook`: body `{entry_date,meal,servings}` logs the scaled nutrition to the diary (201) under the recipe name; servings default to one.
+- `POST /api/v1/nutrition/recipes/import`: body `{url}`. Fetches the page server-side, reads its JSON-LD `schema.org/Recipe` (including `@graph` lists), and returns a reviewable draft (200) with name, description, preparation time, servings, tags, ingredient lines and the catalog food matched to each one. It never writes: the browser opens the prefilled form so the user confirms ingredients. A page without recipe data returns 422 and an unreachable page 502.
+
+The importer only accepts `http`/`https` URLs, bounds the response to 1 MiB with a 10 s timeout, and refuses to dial loopback, private, link-local or multicast addresses so a pasted URL cannot probe the host network. Ingredient lines keep their raw text and the parser understands decimals, fractions, unicode fractions (`½`) and common Spanish/English unit words; matched foods only reuse the parsed quantity when its unit agrees with the food base unit.
 
 Ingredient quantities are scaled by the food base portion and an optional unit must match the food base unit; an unknown food or an out-of-range quantity returns 422. A food used by a recipe cannot be deleted. Deleting a recipe never touches the diary.
 

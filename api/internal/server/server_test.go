@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,6 +16,29 @@ import (
 	"personal-life/api/internal/nutrition"
 	"personal-life/api/internal/server"
 )
+
+type stubRecipes struct{}
+
+func (stubRecipes) Recipe(_ context.Context, source string) (nutrition.ImportedRecipe, error) {
+	switch {
+	case strings.Contains(source, "missing"):
+		return nutrition.ImportedRecipe{}, nutrition.ErrRecipeNotFound
+	case strings.Contains(source, "fail"):
+		return nutrition.ImportedRecipe{}, errors.New("upstream failure")
+	}
+	return nutrition.ImportedRecipe{
+		SourceURL:   source,
+		Name:        "Tortilla de la web",
+		Description: "Paso a paso",
+		PrepMinutes: 25,
+		Servings:    4,
+		Tags:        []string{"española"},
+		Ingredients: []nutrition.ImportedIngredient{
+			{Raw: "4 huevos", Name: "huevos", Quantity: 4},
+			{Raw: "200 g de yogur", Name: "yogur", Quantity: 200, Unit: "g"},
+		},
+	}, nil
+}
 
 type stubFoods struct{}
 
@@ -67,7 +91,7 @@ func TestMVP(testingContext *testing.T) {
 	if operationError := server.Provision(context.Background(), pool, "owner", "a-long-test-password"); operationError != nil {
 		testingContext.Fatal(operationError)
 	}
-	handler := server.New(pool, server.Config{Origin: "http://localhost:5173", SecureCookies: false, OpenFoodFactsClient: stubFoods{}})
+	handler := server.New(pool, server.Config{Origin: "http://localhost:5173", SecureCookies: false, OpenFoodFactsClient: stubFoods{}, RecipeImportClient: stubRecipes{}})
 	var cookie *http.Cookie
 	request := func(method, path, body string, expected int) json.RawMessage {
 		testingContext.Helper()
@@ -245,6 +269,18 @@ func TestMVP(testingContext *testing.T) {
 	}
 	request("POST", "/api/v1/nutrition/foods/import", `{"barcode":"8412345678902"}`, 409)
 	request("POST", "/api/v1/nutrition/foods/import", `{"barcode":"abc"}`, 422)
+	draft := request("POST", "/api/v1/nutrition/recipes/import", `{"url":"https://example.com/tortilla"}`, 200)
+	if !bytes.Contains(draft, []byte(`"name":"Tortilla de la web"`)) || !bytes.Contains(draft, []byte(`"prep_minutes":25`)) || !bytes.Contains(draft, []byte(`"servings":4`)) {
+		testingContext.Fatal("recipe import did not return the parsed draft")
+	}
+	if !bytes.Contains(draft, []byte(`"raw":"4 huevos"`)) || !bytes.Contains(draft, []byte(`"unit":"g"`)) {
+		testingContext.Fatal("recipe import did not keep the parsed ingredient lines")
+	}
+	if !bytes.Contains(draft, []byte(`"food_name":"Yogur importado"`)) {
+		testingContext.Fatal("recipe import did not match a catalog food by name")
+	}
+	request("POST", "/api/v1/nutrition/recipes/import", `{"url":"https://example.com/missing"}`, 422)
+	request("POST", "/api/v1/nutrition/recipes/import", `{"url":"https://example.com/fail"}`, 500)
 	importedID := idOf(imported)
 	request("GET", "/api/v1/nutrition/diary?date=2026-09-16", "", 200)
 	diary := request("POST", "/api/v1/nutrition/diary", `{"entry_date":"2026-09-16","meal":"lunch","food_id":"`+importedID+`","quantity":150,"unit":"g"}`, 201)

@@ -2,6 +2,7 @@ import {
   Apple,
   CalendarDays,
   ChefHat,
+  Settings as SettingsIcon,
   ShoppingCart,
   Target,
   TrendingUp,
@@ -70,6 +71,12 @@ export function NutritionApp() {
           </NavLink>
         </nav>
         <div className="sidebar-bottom">
+          <nav>
+            <NavLink to="/configuration">
+              <SettingsIcon size={17} />
+              Configuración
+            </NavLink>
+          </nav>
           <SidebarFooter open={navOpen} onToggle={() => setNavOpen(!navOpen)} />
         </div>
       </aside>

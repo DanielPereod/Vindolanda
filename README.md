@@ -157,7 +157,7 @@ Use the application switcher to move between Tasks, Notes and Nutrition.
 - **Perfil y objetivos:** weight, height, age, sex, activity and goal. Targets are derived with Mifflin-St Jeor or set manually; the browser mirrors the same formula for a live preview.
 - **Diario:** a day per date with four meals, calories remaining, macro and fiber bars, water and a food picker. Entries freeze the nutrition at logging time, so later catalog edits do not rewrite history.
 - **Alimentos:** a local catalog with brands, barcodes, a base portion, macros, a practical micronutrient set and favorites. Products can be searched and imported from Open Food Facts by name or barcode (ODbL).
-- **Recetas:** ingredients from the catalog with macros computed automatically, per-serving values, Markdown steps, tags and **Cocinar** to add several servings to the diary.
+- **Recetas:** ingredients from the catalog with macros computed automatically, per-serving values, Markdown steps, tags and **Cocinar** to add several servings to the diary. **Importar desde URL** reads a page's `schema.org/Recipe` data and opens the form prefilled for review.
 - **Plan semanal:** a Monday-based week with meals per day, reusable templates, copy week, save week as template and **Pasar el día al diario** (idempotent per planned item).
 - **Lista de la compra:** generated from the week plan or a recipe by summing ingredients, editable, with check-off and **Crear tarea con lo pendiente** through the tasks API.
 - **Progreso:** body measurements per day (weight, body fat and circumference), a weight evolution sparkline and a deletable history.

@@ -4,6 +4,7 @@ import {
   CheckCheck,
   ChevronRight,
   Salad,
+  Settings,
   Vault,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -14,7 +15,9 @@ const TASKS_APP = {
   description: "Un poco más de claridad",
   to: "/today",
   match: (path: string) =>
-    !path.startsWith("/notes") && !path.startsWith("/nutrition"),
+    !path.startsWith("/notes") &&
+    !path.startsWith("/nutrition") &&
+    !path.startsWith("/configuration"),
   Icon: CheckCheck,
 };
 
@@ -36,7 +39,16 @@ const NUTRITION_APP = {
   Icon: Salad,
 };
 
-const APPS = [TASKS_APP, NOTES_APP, NUTRITION_APP];
+const CONFIGURATION_APP = {
+  id: "configuration",
+  name: "Configuración",
+  description: "Tu espacio, a tu manera",
+  to: "/configuration",
+  match: (path: string) => path.startsWith("/configuration"),
+  Icon: Settings,
+};
+
+const APPS = [TASKS_APP, NOTES_APP, NUTRITION_APP, CONFIGURATION_APP];
 
 export function AppSwitcher() {
   const location = useLocation();

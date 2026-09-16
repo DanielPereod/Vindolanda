@@ -10,7 +10,7 @@ import (
 )
 
 // Register attaches authenticated nutrition endpoints.
-func Register(router chi.Router, pool *pgxpool.Pool, client OpenFoodFactsClient) {
+func Register(router chi.Router, pool *pgxpool.Pool, client OpenFoodFactsClient, recipeImporter RecipeImportClient) {
 	router.Get("/nutrition/profile", func(writer http.ResponseWriter, request *http.Request) {
 		value, operationError := GetProfile(request.Context(), pool)
 		if operationError != nil {
@@ -23,6 +23,7 @@ func Register(router chi.Router, pool *pgxpool.Pool, client OpenFoodFactsClient)
 	registerFoods(router, pool, client)
 	registerDiary(router, pool)
 	registerRecipes(router, pool)
+	registerRecipeImport(router, pool, recipeImporter)
 	registerPlans(router, pool)
 	registerShopping(router, pool)
 	registerMeasurements(router, pool)

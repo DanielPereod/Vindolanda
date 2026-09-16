@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { Food, FoodInput } from "./types";
 import { Dropdown } from "./Dropdown";
+import { loadNutritionPreferences } from "./preferences";
 
 type NumericNutrient =
   | "calories_kcal"
@@ -46,7 +47,7 @@ function draftFrom(food: Food | null): FoodDraft {
     brand: food?.brand ?? "",
     barcode: food?.barcode ?? "",
     base_quantity: food?.base_quantity ?? 100,
-    base_unit: food?.base_unit ?? "g",
+    base_unit: food?.base_unit ?? loadNutritionPreferences().defaultBaseUnit,
     calories_kcal: food?.calories_kcal ?? 0,
     protein_g: food?.protein_g ?? 0,
     carbs_g: food?.carbs_g ?? 0,

@@ -1,7 +1,12 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import type { Recipe, RecipeInput } from "./types";
+import type {
+  DraftIngredient,
+  Recipe,
+  RecipeDraft,
+  RecipeInput,
+} from "./types";
 import { FoodPicker } from "./FoodPicker";
 
 interface IngredientRow {
@@ -22,25 +27,51 @@ function rowsFrom(recipe: Recipe | null): IngredientRow[] {
   }));
 }
 
+function rowsFromDraft(draft: RecipeDraft): IngredientRow[] {
+  if (draft.ingredients.length === 0) return rowsFrom(null);
+  return draft.ingredients.map((ingredient) => ({
+    food_id: ingredient.food_id,
+    food_name: ingredient.food_name,
+    quantity: draftQuantity(ingredient),
+    note: ingredient.raw,
+  }));
+}
+
+/** Solo se usa la cantidad leída si su unidad encaja con la del alimento. */
+function draftQuantity(ingredient: DraftIngredient): number {
+  if (!ingredient.food_id || ingredient.quantity <= 0) return 100;
+  if (ingredient.unit === "" || ingredient.unit === ingredient.base_unit)
+    return ingredient.quantity;
+  return 100;
+}
+
 /** Alta y edición de una receta con sus ingredientes. */
 export function RecipeForm({
   recipe,
+  draft,
   pending,
   onCancel,
   onSubmit,
 }: {
   recipe: Recipe | null;
+  draft?: RecipeDraft | null;
   pending: boolean;
   onCancel: () => void;
   onSubmit: (value: RecipeInput) => void;
 }) {
-  const [name, setName] = useState(recipe?.name ?? "");
-  const [description, setDescription] = useState(recipe?.description ?? "");
-  const [prepMinutes, setPrepMinutes] = useState(recipe?.prep_minutes ?? 0);
-  const [servings, setServings] = useState(recipe?.servings ?? 1);
-  const [tagsText, setTagsText] = useState((recipe?.tags ?? []).join(", "));
+  const source = recipe ?? draft ?? null;
+  const [name, setName] = useState(source?.name ?? "");
+  const [description, setDescription] = useState(source?.description ?? "");
+  const [prepMinutes, setPrepMinutes] = useState(source?.prep_minutes ?? 0);
+  const [servings, setServings] = useState(source?.servings ?? 1);
+  const [tagsText, setTagsText] = useState((source?.tags ?? []).join(", "));
   const [favorite, setFavorite] = useState(recipe?.favorite ?? false);
-  const [rows, setRows] = useState<IngredientRow[]>(() => rowsFrom(recipe));
+  const [rows, setRows] = useState<IngredientRow[]>(() =>
+    recipe ? rowsFrom(recipe) : draft ? rowsFromDraft(draft) : rowsFrom(null),
+  );
+  const unmatched = draft
+    ? draft.ingredients.filter((ingredient) => !ingredient.food_id)
+    : [];
 
   function updateRow(index: number, patch: Partial<IngredientRow>) {
     setRows((current) =>
@@ -125,7 +156,22 @@ export function RecipeForm({
         />
       </label>
 
+      {draft && (
+        <p className="muted">
+          Importada de{" "}
+          <a href={draft.source_url} target="_blank" rel="noreferrer">
+            la receta original
+          </a>
+          . Revisa los ingredientes: asigna un alimento a los que falten.
+        </p>
+      )}
       <h2>Ingredientes</h2>
+      {unmatched.length > 0 && (
+        <p className="muted" role="status">
+          Sin alimento asignado:{" "}
+          {unmatched.map((ingredient) => ingredient.raw).join(" · ")}
+        </p>
+      )}
       {rows.map((row, index) => (
         <div className="recipe-ingredient" key={index}>
           <FoodPicker

@@ -105,7 +105,9 @@ test.beforeEach(async ({ page }) => {
       return;
     }
     if (path.startsWith("/note-folders/") && method === "PUT") {
-      const index = folders.findIndex((folder) => folder.id === path.split("/")[2]);
+      const index = folders.findIndex(
+        (folder) => folder.id === path.split("/")[2],
+      );
       const current = folders[index];
       if (!current) throw new Error("Unknown folder");
       const updated = {
@@ -299,7 +301,7 @@ test("folders, trash and restoration preserve notes and their identity", async (
   await expect(
     page
       .locator(".folder-children")
-      .getByRole("link", { name: "Organized idea" }),
+      .getByRole("button", { name: "Organized idea" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Más opciones" }).click();
   await page.getByRole("menuitem", { name: "Eliminar archivo" }).click();
@@ -309,7 +311,7 @@ test("folders, trash and restoration preserve notes and their identity", async (
   await expect(
     page
       .locator(".notes-sidebar")
-      .getByRole("link", { name: "Organized idea" }),
+      .getByRole("button", { name: "Organized idea" }),
   ).toHaveCount(0);
   await page
     .getByRole("button", { name: "Restaurar Organized idea", exact: true })
@@ -319,7 +321,7 @@ test("folders, trash and restoration preserve notes and their identity", async (
   await expect(
     page
       .locator(".folder-children")
-      .getByRole("link", { name: "Organized idea" }),
+      .getByRole("button", { name: "Organized idea" }),
   ).toBeVisible();
 });
 
@@ -339,6 +341,12 @@ test("folders drag into other folders and back to the root", async ({
       page.locator(".folder-heading", { hasText: name }).first(),
     ).toBeVisible();
   }
+  // Una nota situada en la raíz también sirve para devolver la carpeta a la raíz.
+  await page.getByRole("button", { name: "Nota", exact: true }).click();
+  await page.getByRole("textbox", { name: "Título de nota" }).fill("Root note");
+  await expect(page.locator('.notes-toolbar [role="status"]')).toHaveText(
+    "Guardado",
+  );
   await drag(
     page,
     page.locator(".folder-heading", { hasText: "Archive" }).first(),
@@ -348,11 +356,10 @@ test("folders drag into other folders and back to the root", async ({
     .locator(".folder-branch", { hasText: "Research" })
     .locator(".folder-children .folder-heading", { hasText: "Archive" });
   await expect(nested).toBeVisible();
-  // Soltar en el área vacía del explorador devuelve la carpeta a la raíz.
   await drag(
     page,
     page.locator(".folder-heading", { hasText: "Archive" }).first(),
-    page.locator(".note-explorer"),
+    page.locator(".explorer-note-row", { hasText: "Root note" }).first(),
   );
   await expect(nested).toHaveCount(0);
 });
@@ -396,7 +403,7 @@ test("renamed links display the new title and navigate by original identity", as
   );
   await page
     .locator(".notes-sidebar")
-    .getByRole("link", { name: "Original", exact: true })
+    .getByRole("button", { name: "Original", exact: true })
     .click();
   await expect(
     page.getByRole("textbox", { name: "Título de nota" }),
@@ -408,11 +415,11 @@ test("renamed links display the new title and navigate by original identity", as
   await expect(
     page
       .locator(".notes-sidebar")
-      .getByRole("link", { name: "Renamed", exact: true }),
+      .getByRole("button", { name: "Renamed", exact: true }),
   ).toBeVisible();
   await page
     .locator(".notes-sidebar")
-    .getByRole("link", { name: "Source", exact: true })
+    .getByRole("button", { name: "Source", exact: true })
     .click();
   await expect(
     page.getByRole("textbox", { name: "Título de nota" }),
@@ -529,7 +536,7 @@ test("notes persist, navigate wiki links, organize a base and connect canvas car
   await expect(
     page
       .locator(".notes-sidebar")
-      .getByRole("link", { name: "Ideas activas", exact: true }),
+      .getByRole("button", { name: "Ideas activas", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Canvas", exact: true }).click();
   // Pantalla completa: la barra inferior crea tarjetas que solo viven en el lienzo.
@@ -627,7 +634,7 @@ test("live preview renders Markdown inline and follows wikilinks", async ({
   );
   await page
     .locator(".notes-sidebar")
-    .getByRole("link", { name: "Live source", exact: true })
+    .getByRole("button", { name: "Live source", exact: true })
     .click();
   await page.getByRole("button", { name: "Cambiar modo de vista" }).click();
   await page
@@ -674,7 +681,7 @@ test("task editor saves note associations and notes show the backlink", async ({
   await page.getByRole("menuitem", { name: /Notas/ }).click();
   await page
     .locator(".notes-sidebar")
-    .getByRole("link", { name: "Referencia", exact: true })
+    .getByRole("button", { name: "Referencia", exact: true })
     .click();
   await page.getByRole("link", { name: /Preparar propuesta/ }).click();
   await expect(page.getByRole("dialog")).toBeVisible();

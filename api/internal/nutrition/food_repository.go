@@ -3,9 +3,11 @@ package nutrition
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"personal-life/api/internal/core"
 )
 
@@ -81,6 +83,32 @@ func DeleteFood(requestContext context.Context, database core.Database, identifi
 		return core.Error{Status: 404, Message: "Resource not found"}
 	}
 	return nil
+}
+
+// MatchFoodByName finds the closest catalog food for an imported ingredient.
+func MatchFoodByName(requestContext context.Context, database core.Database, name string) (Food, bool, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return Food{}, false, nil
+	}
+	food, operationError := core.One[Food](requestContext, database, "SELECT to_jsonb(food) FROM foods food WHERE lower(food.name)=lower($1) ORDER BY food.favorite DESC, food.id LIMIT 1", trimmed)
+	if operationError == nil {
+		return food, true, nil
+	}
+	if !errors.Is(operationError, pgx.ErrNoRows) {
+		return Food{}, false, operationError
+	}
+	if len([]rune(trimmed)) < 3 {
+		return Food{}, false, nil
+	}
+	food, operationError = core.One[Food](requestContext, database, "SELECT to_jsonb(food) FROM foods food WHERE strpos(lower(food.name), lower($1)) > 0 ORDER BY length(food.name), food.favorite DESC, food.id LIMIT 1", trimmed)
+	if errors.Is(operationError, pgx.ErrNoRows) {
+		return Food{}, false, nil
+	}
+	if operationError != nil {
+		return Food{}, false, operationError
+	}
+	return food, true, nil
 }
 
 // foodsByIDs loads several catalog foods at once.

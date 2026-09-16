@@ -1,8 +1,16 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChefHat, Pencil, Plus, Search, Star, Trash2 } from "lucide-react";
+import {
+  ChefHat,
+  Link2,
+  Pencil,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { api, errorMessage, useResource } from "./api";
-import type { DiaryEntry, Recipe, RecipeInput } from "./types";
+import type { DiaryEntry, Recipe, RecipeDraft, RecipeInput } from "./types";
 import { localDate } from "./dates";
 import { Dropdown } from "./Dropdown";
 import { Modal } from "./Modal";
@@ -22,6 +30,9 @@ export function RecipesPage() {
   const debounced = useDebounced(search);
   const [editing, setEditing] = useState<Recipe | null>(null);
   const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState<RecipeDraft | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
   const [cooking, setCooking] = useState<Recipe | null>(null);
   const [cookDate, setCookDate] = useState("");
   const [cookMeal, setCookMeal] = useState<DiaryEntry["meal"]>("lunch");
@@ -58,6 +69,26 @@ export function RecipesPage() {
       else await api("/nutrition/recipes", "POST", value);
       setEditing(null);
       setCreating(false);
+      setDraft(null);
+    });
+  }
+
+  /** Lee una URL y abre el formulario con lo que se haya podido extraer. */
+  function importRecipe() {
+    void run(async () => {
+      const value = await api<RecipeDraft>(
+        "/nutrition/recipes/import",
+        "POST",
+        { url: importUrl.trim() },
+      );
+      setImportOpen(false);
+      setImportUrl("");
+      setEditing(null);
+      setDraft(value);
+      setCreating(true);
+      setMessage(
+        `Receta importada: «${value.name}». Revisa los ingredientes antes de guardar.`,
+      );
     });
   }
 
@@ -88,10 +119,28 @@ export function RecipesPage() {
       <div className="eyebrow">TU RECETARIO</div>
       <div className="page-heading">
         <h1>Recetas</h1>
-        <button className="primary add-main" onClick={() => setCreating(true)}>
-          <Plus size={16} />
-          Nueva receta
-        </button>
+        <div className="heading-actions">
+          <button
+            className="secondary"
+            onClick={() => {
+              setDraft(null);
+              setImportOpen(true);
+            }}
+          >
+            <Link2 size={16} />
+            Importar desde URL
+          </button>
+          <button
+            className="primary add-main"
+            onClick={() => {
+              setDraft(null);
+              setCreating(true);
+            }}
+          >
+            <Plus size={16} />
+            Nueva receta
+          </button>
+        </div>
       </div>
       <p className="page-subtitle">
         Guarda tus recetas con ingredientes y macros calculadas solas.
@@ -194,20 +243,75 @@ export function RecipesPage() {
         </div>
       )}
 
+      {importOpen && (
+        <Modal
+          title="Importar receta desde URL"
+          onClose={() => {
+            setImportOpen(false);
+            setImportUrl("");
+          }}
+        >
+          <div className="editor">
+            <label>
+              URL de la receta
+              <input
+                autoFocus
+                type="url"
+                required
+                maxLength={2048}
+                placeholder="https://…"
+                value={importUrl}
+                onChange={(event) => setImportUrl(event.target.value)}
+              />
+            </label>
+            <p className="muted">
+              Leeremos los datos de la página y abriremos el formulario para que
+              revises los ingredientes.
+            </p>
+            <footer className="form-footer">
+              <button
+                className="secondary"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportUrl("");
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="primary"
+                disabled={pending || importUrl.trim() === ""}
+                onClick={importRecipe}
+              >
+                {pending ? "Importando…" : "Importar"}
+              </button>
+            </footer>
+          </div>
+        </Modal>
+      )}
       {formOpen && (
         <Modal
-          title={editing ? "Editar receta" : "Nueva receta"}
+          title={
+            editing
+              ? "Editar receta"
+              : draft
+                ? "Revisar receta importada"
+                : "Nueva receta"
+          }
           onClose={() => {
             setEditing(null);
             setCreating(false);
+            setDraft(null);
           }}
         >
           <RecipeForm
             recipe={editing}
+            draft={draft}
             pending={pending}
             onCancel={() => {
               setEditing(null);
               setCreating(false);
+              setDraft(null);
             }}
             onSubmit={save}
           />

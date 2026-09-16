@@ -43,7 +43,6 @@ import type { EntityDraft } from "./EntityEditor";
 import { TaskList, DropArea, ScheduledTaskList } from "./TaskList";
 import { CalendarView } from "./CalendarView";
 import { KanbanBoard, ProjectGroupedList } from "./ProjectViews";
-import { SettingsPage } from "./SettingsPage";
 import { SidebarFooter, SidebarToggle } from "./SidebarToggle";
 import { useSidebarState } from "./useSidebarState";
 import { Modal } from "./Modal";
@@ -58,6 +57,11 @@ const NotesWorkspace = lazy(async () => {
 const NutritionWorkspace = lazy(async () => {
   const module = await import("./NutritionApp");
   return { default: module.NutritionApp };
+});
+
+const ConfigurationWorkspace = lazy(async () => {
+  const module = await import("./ConfigurationApp");
+  return { default: module.ConfigurationApp };
 });
 
 export function App() {
@@ -100,6 +104,14 @@ export function App() {
         fallback={<div className="loading-screen">Cargando nutrición…</div>}
       >
         <NutritionWorkspace />
+      </Suspense>
+    );
+  if (location.pathname.startsWith("/configuration"))
+    return (
+      <Suspense
+        fallback={<div className="loading-screen">Cargando configuración…</div>}
+      >
+        <ConfigurationWorkspace />
       </Suspense>
     );
   return <Workspace />;
@@ -748,9 +760,7 @@ function Workspace() {
                 </button>
               </div>
             )}
-            {route === "/configuration" ? (
-              <SettingsPage settings={settings} />
-            ) : route === "/projects" || route === "/labels" ? (
+            {route === "/projects" || route === "/labels" ? (
               <>
                 <div className="eyebrow">TODO EN SU LUGAR</div>
                 <div className="page-heading">

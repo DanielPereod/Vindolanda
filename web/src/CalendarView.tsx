@@ -7,6 +7,8 @@ import { DropArea } from "./TaskList";
 import { Modal } from "./Modal";
 import { Dropdown } from "./Dropdown";
 import { formatDate, formatTime } from "./dates";
+import { loadCalendarMode, saveCalendarMode } from "./preferences";
+import type { CalendarMode as Mode } from "./preferences";
 
 interface CalendarProps {
   tasks: Task[];
@@ -19,9 +21,6 @@ interface CalendarProps {
   action: (task: Task, action: string) => void;
   addTask: (dueDate: string | null, dueTime?: string | null) => void;
 }
-
-type Mode =
-  "year" | "month" | "week" | "day" | "agenda" | "multiday" | "multiweek";
 
 /** Tareas visibles por celda antes de ofrecer el resto en el modal del día. */
 const MONTH_PREVIEW = 4;
@@ -103,28 +102,8 @@ function barColor(task: Task, projects: Project[], accent: string): string {
   );
 }
 
-function loadMode(): Mode {
-  try {
-    const saved = localStorage.getItem("calendar-mode");
-    if (saved === "3day") return "multiday";
-    if (
-      saved === "day" ||
-      saved === "week" ||
-      saved === "month" ||
-      saved === "year" ||
-      saved === "agenda" ||
-      saved === "multiday" ||
-      saved === "multiweek"
-    )
-      return saved;
-  } catch {
-    /* almacenamiento no disponible: vista por defecto */
-  }
-  return "month";
-}
-
 export function CalendarView(props: CalendarProps) {
-  const [mode, setModeState] = useState<Mode>(loadMode);
+  const [mode, setModeState] = useState<Mode>(loadCalendarMode);
   const [anchor, setAnchor] = useState(props.today);
   const [detailDay, setDetailDay] = useState<string | null>(null);
   const [showOverdue, setShowOverdue] = useState(
@@ -150,11 +129,7 @@ export function CalendarView(props: CalendarProps) {
 
   function setMode(next: Mode) {
     setModeState(next);
-    try {
-      localStorage.setItem("calendar-mode", next);
-    } catch {
-      /* sin persistencia: la vista sigue funcionando en memoria */
-    }
+    saveCalendarMode(next);
   }
 
   const byDate = useMemo(() => {

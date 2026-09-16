@@ -17,6 +17,7 @@ import {
   Network,
   Pencil,
   Plus,
+  Settings as SettingsIcon,
   Table2,
   Tag,
   Trash2,
@@ -36,6 +37,7 @@ import { Dropdown } from "./Dropdown";
 import { WorkspaceTools } from "./WorkspaceTools";
 import { CanvasBoard } from "./CanvasBoard";
 import { TaskEditor } from "./TaskEditor";
+import { loadNotesPreferences } from "./preferences";
 
 const icons = { note: FileText, base: Table2, canvas: Network };
 const labels = { note: "Nota", base: "Base", canvas: "Canvas" };
@@ -52,8 +54,12 @@ export function NotesApp() {
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [preferences] = useState(() => loadNotesPreferences());
   const client = useQueryClient();
   useEffect(() => setPending(false), [location.pathname]);
+  function shouldConfirm(message: string) {
+    return !preferences.confirmDiscard || window.confirm(message);
+  }
   const notes = query.data ?? [];
   const selected = notes.find(
     (note) => note.id === location.pathname.split("/")[2],
@@ -137,7 +143,7 @@ export function NotesApp() {
   ) {
     if (
       document.querySelector("[data-unsaved=true]") &&
-      !window.confirm("Hay cambios sin guardar. ¿Crear otra página?")
+      !shouldConfirm("Hay cambios sin guardar. ¿Crear otra página?")
     )
       return;
     let ordinal = 1;
@@ -232,7 +238,7 @@ export function NotesApp() {
   function openTool(path: string) {
     if (
       document.querySelector("[data-unsaved=true]") &&
-      !window.confirm("Hay cambios sin guardar. ¿Continuar?")
+      !shouldConfirm("Hay cambios sin guardar. ¿Continuar?")
     )
       return;
     navigate(path);
@@ -263,6 +269,10 @@ export function NotesApp() {
           <NavLink className="notes-trash-link" to="/notes/trash">
             <Trash2 size={15} />
             Papelera
+          </NavLink>
+          <NavLink className="notes-trash-link" to="/configuration">
+            <SettingsIcon size={15} />
+            Configuración
           </NavLink>
           {query.isPending && <p>Cargando notas…</p>}
           {query.isError && (

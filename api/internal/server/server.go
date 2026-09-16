@@ -31,6 +31,8 @@ type Config struct {
 	OpenFoodFactsUserAgent string
 	// OpenFoodFactsClient overrides the upstream client, primarily for tests.
 	OpenFoodFactsClient nutrition.OpenFoodFactsClient
+	// RecipeImportClient overrides the recipe page importer, primarily for tests.
+	RecipeImportClient nutrition.RecipeImportClient
 }
 
 // New returns a concurrent-safe HTTP handler backed by the supplied pool.
@@ -74,6 +76,10 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	if foods == nil {
 		foods = nutrition.NewOpenFoodFactsClient(config.OpenFoodFactsUserAgent)
 	}
+	recipeImporter := config.RecipeImportClient
+	if recipeImporter == nil {
+		recipeImporter = nutrition.NewRecipeImportClient(config.OpenFoodFactsUserAgent)
+	}
 	router.Route("/api/v1", func(api chi.Router) {
 		authentication.Register(api)
 		api.Group(func(private chi.Router) {
@@ -85,7 +91,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 			tasks.Register(private, pool)
 			notes.Register(private, pool)
 			attachments.Register(private, pool)
-			nutrition.Register(private, pool, foods)
+			nutrition.Register(private, pool, foods, recipeImporter)
 		})
 	})
 	return router

@@ -315,6 +315,40 @@ async function installApi(page: Page, state: State): Promise<void> {
       await route.fulfill({ status: 201, json: food });
       return;
     }
+    if (path === "/nutrition/recipes/import") {
+      const matched = state.foods[0];
+      await route.fulfill({
+        json: {
+          source_url: body<{ url: string }>().url,
+          name: "Tortilla de la web",
+          description: "Paso a paso",
+          prep_minutes: 25,
+          servings: 4,
+          tags: ["española"],
+          ingredients: [
+            {
+              raw: "4 huevos",
+              name: "huevos",
+              quantity: 4,
+              unit: "",
+              food_id: matched?.id ?? "",
+              food_name: matched?.name ?? "",
+              base_unit: matched?.base_unit ?? "g",
+            },
+            {
+              raw: "1 pizca de sal",
+              name: "sal",
+              quantity: 1,
+              unit: "pizca",
+              food_id: "",
+              food_name: "",
+              base_unit: "",
+            },
+          ],
+        },
+      });
+      return;
+    }
     if (path === "/nutrition/recipes") {
       if (method === "POST") {
         const recipe = buildRecipe(body<RecipeInput>(), state.foods);
@@ -574,6 +608,35 @@ test("crear una receta calcula las macros por ración", async ({ page }) => {
   await page.getByRole("button", { name: "Crear receta" }).click();
   await expect(page.getByRole("heading", { name: "Bol" })).toBeVisible();
   await expect(page.getByText("29.5 kcal / ración")).toBeVisible();
+});
+
+test("importar una receta desde URL abre el formulario pre-rellenado", async ({
+  page,
+}) => {
+  state.foods.push(
+    makeFood({ name: "Yogur griego", calories_kcal: 59, protein_g: 10 }),
+  );
+  await page.goto("/nutrition/recipes");
+  await page.getByRole("button", { name: "Importar desde URL" }).click();
+  await page
+    .getByLabel("URL de la receta")
+    .fill("https://example.com/tortilla");
+  await page.getByRole("button", { name: "Importar", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Revisar receta importada" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Nombre")).toHaveValue("Tortilla de la web");
+  await expect(page.getByLabel("Raciones")).toHaveValue("4");
+  await expect(
+    page.getByText("Sin alimento asignado: 1 pizca de sal"),
+  ).toBeVisible();
+  await expect(page.getByLabel("Nota del ingrediente 1")).toHaveValue(
+    "4 huevos",
+  );
+  await page.getByRole("button", { name: "Crear receta" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Tortilla de la web" }),
+  ).toBeVisible();
 });
 
 test("el plan semanal pasa el día al diario", async ({ page }) => {
