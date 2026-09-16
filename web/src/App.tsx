@@ -17,8 +17,6 @@ import {
   CalendarDays,
   Check,
   CheckCheck,
-  ChevronRight,
-  CircleHelp,
   Folder,
   Inbox,
   Leaf,
@@ -40,7 +38,9 @@ import { EntityEditor } from "./EntityEditor";
 import type { EntityDraft } from "./EntityEditor";
 import { TaskList, DropArea, ScheduledTaskList } from "./TaskList";
 import { SettingsPage } from "./SettingsPage";
-import { NotesApp, AppSwitcher } from "./NotesApp";
+import { NotesApp } from "./NotesApp";
+import { SidebarHeader, SidebarToggle } from "./SidebarToggle";
+import { useSidebarState } from "./useSidebarState";
 import { Modal } from "./Modal";
 import { localDate } from "./dates";
 
@@ -71,7 +71,7 @@ export function App() {
       </div>
     );
   if (location.pathname.startsWith("/notes")) return <NotesApp />;
-  return <Workspace user={session.data} />;
+  return <Workspace />;
 }
 function Login() {
   const [username, setUsername] = useState("");
@@ -178,14 +178,14 @@ function Login() {
     </main>
   );
 }
-function Workspace({ user }: { user: User }) {
+function Workspace() {
   const projectQuery = useResource<Project[]>("/projects");
   const sectionQuery = useResource<Section[]>("/sections");
   const labelQuery = useResource<Label[]>("/labels");
   const settingsQuery = useResource<Settings>("/settings");
   const [draft, setDraft] = useState<TaskDraft | null>(null);
   const [entity, setEntity] = useState<EntityDraft | null>(null);
-  const [sidebar, setSidebar] = useState(false);
+  const [navOpen, setNavOpen] = useSidebarState();
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState("");
@@ -251,11 +251,11 @@ function Workspace({ user }: { user: User }) {
     }),
   );
   useEffect(() => {
-    setSidebar(false);
     setSearch("");
     setSearchOpen(false);
     setSort("");
-  }, [route]);
+    if (window.innerWidth <= 800) setNavOpen(false);
+  }, [route, setNavOpen]);
   useAppearance(settings);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
@@ -435,30 +435,16 @@ function Workspace({ user }: { user: User }) {
   };
   return (
     <DndContext sensors={sensors} onDragEnd={dragEnd}>
-      <div className="app-shell">
-        {sidebar && (
+      <div className={`app-shell ${navOpen ? "" : "nav-collapsed"}`}>
+        {navOpen && (
           <button
             aria-label="Cerrar navegación"
             className="sidebar-backdrop"
-            onClick={() => setSidebar(false)}
+            onClick={() => setNavOpen(false)}
           />
         )}
-        <aside className={`sidebar ${sidebar ? "open" : ""}`}>
-          <NavLink to="/today" className="brand">
-            <span className="brand-mark">
-              <Leaf size={22} />
-            </span>
-            personal life<span className="brand-period">.</span>
-          </NavLink>
-          <button className="workspace-select">
-            <span className="avatar">
-              {user.username.slice(0, 1).toUpperCase()}
-            </span>
-            <span>
-              Mi espacio personal<small>Un poco más de claridad</small>
-            </span>
-            <ChevronRight size={14} />
-          </button>
+        <aside className={`sidebar ${navOpen ? "open" : ""}`}>
+          <SidebarHeader open={navOpen} onToggle={() => setNavOpen(!navOpen)} />
           <button className="quick-add" onClick={() => setDraft({ projectId })}>
             <Plus size={19} />
             Añadir tarea<kbd>Q</kbd>
@@ -547,14 +533,6 @@ function Workspace({ user }: { user: User }) {
               ))}
           </nav>
           <div className="sidebar-bottom">
-            <div className="sidebar-note">
-              <Leaf size={17} />
-              <span>
-                Pequeños pasos.
-                <br />
-                <strong>Grandes cambios.</strong>
-              </span>
-            </div>
             <nav>
               <NavLink to="/configuration">
                 <SettingsIcon size={17} />
@@ -571,53 +549,25 @@ function Workspace({ user }: { user: User }) {
                 Cerrar sesión
               </button>
             </nav>
-            <div className="version">
-              PERSONAL LIFE <span>Tu día, a tu ritmo.</span>
-            </div>
           </div>
         </aside>
         <div className="main-shell">
-          <header className="topbar">
-            <div>
-              <button
-                className="icon-button mobile-menu"
-                aria-label="Abrir navegación"
-                onClick={() => setSidebar(true)}
-              >
-                <Menu size={20} />
-              </button>
-              <span className="breadcrumb">
-                Mi espacio
-                <ChevronRight size={13} />
-                <strong>
-                  {route === "/configuration"
-                    ? "Configuración"
-                    : route === "/projects"
-                      ? "Proyectos"
-                      : route === "/labels"
-                        ? "Etiquetas"
-                        : title}
-                </strong>
-              </span>
-            </div>
-            <div className="topbar-right">
-              <AppSwitcher />
-              <span className="today-date">
-                {new Intl.DateTimeFormat("es-ES", {
-                  timeZone: settings.timezone,
-                  day: "numeric",
-                  month: "long",
-                }).format(new Date())}
-              </span>
-              <span className="private-pill">
-                <span />
-                Personal
-              </span>
-              <span className="avatar small">
-                {user.username.slice(0, 1).toUpperCase()}
-              </span>
-            </div>
-          </header>
+          <div className="topbar">
+            {!navOpen && (
+              <SidebarToggle
+                open={navOpen}
+                floating
+                onToggle={() => setNavOpen(true)}
+              />
+            )}
+            <button
+              className="icon-button mobile-menu mobile-fab"
+              aria-label="Abrir navegación"
+              onClick={() => setNavOpen(true)}
+            >
+              <Menu size={20} />
+            </button>
+          </div>
           <main className="main-content">
             {error && (
               <div className="error banner" role="alert">
@@ -972,7 +922,7 @@ function Workspace({ user }: { user: User }) {
                         ? "Tus avances tendrán su lugar aquí"
                         : search
                           ? "No encontramos esas tareas"
-                          : "Un poco de espacio para respirar"
+                          : "No hay nada por aquí"
                     }
                     text={
                       view === "completed"
@@ -1002,24 +952,9 @@ function Workspace({ user }: { user: User }) {
                     Añadir tarea<span>Pulsa Q para añadir rápidamente</span>
                   </button>
                 )}
-                <div className="page-bottom-note">
-                  <Leaf size={16} />
-                  <span>
-                    No tienes que hacerlo todo hoy. Solo dar el siguiente paso.
-                  </span>
-                </div>
               </>
             )}
           </main>
-          <footer className="main-footer">
-            <span>
-              <span className="status-dot" />
-              Tu espacio personal
-            </span>
-            <span>
-              <CircleHelp size={13} />Q para añadir · Ctrl K para buscar
-            </span>
-          </footer>
         </div>
         {draft && (
           <TaskEditor

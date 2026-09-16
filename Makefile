@@ -1,4 +1,8 @@
 SHELL := /bin/bash
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
 .PHONY: verify integration e2e format dev-api dev-web migrate provision
 verify:
 	@test -z "$$(gofmt -l api)" || (echo 'Run make format'; exit 1)
@@ -19,4 +23,10 @@ dev-web:
 migrate:
 	cd api && go run ./cmd/api migrate
 provision:
-	cd api && go run ./cmd/api provision
+	@if [ -z "$$INITIAL_PASSWORD" ]; then \
+		read -rsp 'Initial password (12–72 bytes): ' INITIAL_PASSWORD; echo; \
+		export INITIAL_PASSWORD="$$INITIAL_PASSWORD"; \
+		cd api && go run ./cmd/api provision; \
+	else \
+		cd api && go run ./cmd/api provision; \
+	fi

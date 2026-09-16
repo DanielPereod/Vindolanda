@@ -1,9 +1,18 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import type { Note } from "./notes";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
+import {
+  ArrowUpRight,
+  ExternalLink,
+  FileText,
+  Network,
+  Search,
+  Table2,
+  X,
+} from "lucide-react";
 import { api, errorMessage, useResource } from "./api";
 import type {
   Completion,
@@ -39,7 +48,11 @@ export function TaskEditor({
   onClose: () => void;
 }) {
   const client = useQueryClient();
+  const navigate = useNavigate();
   const notes = useResource<Note[]>("/notes");
+  const [labelFilter, setLabelFilter] = useState("");
+  const [noteFilter, setNoteFilter] = useState("");
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [formInput, setFormInput] = useState<TaskInput>(() =>
     draft.task
       ? {
@@ -73,12 +86,15 @@ export function TaskEditor({
   const [recognitionEnabled, setRecognitionEnabled] = useState(!draft.task);
   const [ignored, setIgnored] = useState<string[]>([]);
   const [createdLabels, setCreatedLabels] = useState<Label[]>([]);
-  const availableLabels = [
-    ...labels,
-    ...createdLabels.filter(
-      (created) => !labels.some((label) => label.id === created.id),
-    ),
-  ];
+  const availableLabels = useMemo(
+    () => [
+      ...labels,
+      ...createdLabels.filter(
+        (created) => !labels.some((label) => label.id === created.id),
+      ),
+    ],
+    [labels, createdLabels],
+  );
   const result = recognitionEnabled
     ? parseQuickAdd(
         formInput.title,
@@ -93,6 +109,71 @@ export function TaskEditor({
     : { input: formInput, tokens: [], recognized: [], warning: null };
   const input = result.input;
   const candidates = useResource<Task[]>("/tasks");
+  const labelQuery = labelFilter.trim().toLocaleLowerCase();
+  const filteredLabels = useMemo(
+    () =>
+      availableLabels
+        .filter((label) =>
+          label.name.toLocaleLowerCase().includes(labelQuery),
+        )
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [availableLabels, labelQuery],
+  );
+  const selectedLabels = useMemo(
+    () =>
+      availableLabels
+        .filter((label) => input.label_ids.includes(label.id))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [availableLabels, input.label_ids],
+  );
+  const noteQuery = noteFilter.trim().toLocaleLowerCase();
+  const filteredNotes = useMemo(() => {
+    const all = notes.data ?? [];
+    const matching = all.filter((note) =>
+      `${note.title} ${note.content} ${note.kind}`
+        .toLocaleLowerCase()
+        .includes(noteQuery),
+    );
+    return [...matching].sort((left, right) =>
+      left.title.localeCompare(right.title),
+    );
+  }, [notes.data, noteQuery]);
+  const selectedNotes = useMemo(() => {
+    const all = notes.data ?? [];
+    return (input.note_ids ?? [])
+      .map((identifier) => all.find((note) => note.id === identifier))
+      .filter((note): note is Note => Boolean(note))
+      .sort((left, right) => left.title.localeCompare(right.title));
+  }, [notes.data, input.note_ids]);
+  const previewNote =
+    (notes.data ?? []).find((note) => note.id === previewId) ?? null;
+  function toggleLabel(identifier: string, checked: boolean) {
+    field(
+      "label_ids",
+      checked
+        ? [...input.label_ids, identifier]
+        : input.label_ids.filter((id) => id !== identifier),
+    );
+  }
+  function toggleNote(identifier: string, checked: boolean) {
+    const current = input.note_ids ?? [];
+    field(
+      "note_ids",
+      checked
+        ? [...current, identifier]
+        : current.filter((id) => id !== identifier),
+    );
+  }
+  function goToNote(identifier: string) {
+    setPreviewId(null);
+    onClose();
+    navigate(`/notes/${identifier}`);
+  }
+  function goToTask(task: Task) {
+    setPreviewId(null);
+    onClose();
+    navigate(`/inbox?task=${task.id}`);
+  }
   function setInput(update: (current: TaskInput) => TaskInput) {
     setFormInput(update(input));
     setRecognitionEnabled(false);
@@ -362,64 +443,201 @@ export function TaskEditor({
                 />
               </label>
             </div>
-            <fieldset>
-              <legend>Etiquetas</legend>
+            <fieldset className="relation-field">
+              <legend>
+                Etiquetas · {selectedLabels.length}/{availableLabels.length}
+              </legend>
               {availableLabels.length === 0 && (
                 <p className="muted">Crea etiquetas desde la barra lateral.</p>
               )}
-              <div className="label-options">
-                {availableLabels.map((label) => (
-                  <label key={label.id}>
+              {selectedLabels.length > 0 && (
+                <div
+                  className="relation-chips"
+                  aria-label="Etiquetas seleccionadas"
+                >
+                  {selectedLabels.map((label) => (
+                    <span key={label.id} className="relation-chip">
+                      <NavLink
+                        to={`/label/${label.id}`}
+                        onClick={onClose}
+                        title={`Ir a la etiqueta ${label.name}`}
+                      >
+                        <span className="accent-marker">@</span>
+                        {label.name}
+                      </NavLink>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Quitar etiqueta ${label.name}`}
+                        onClick={() => toggleLabel(label.id, false)}
+                      >
+                        <X size={13} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {availableLabels.length > 0 && (
+                <>
+                  <div className="relation-search">
+                    <Search size={14} aria-hidden="true" />
                     <input
-                      type="checkbox"
-                      checked={input.label_ids.includes(label.id)}
+                      type="search"
+                      aria-label="Buscar etiquetas"
+                      placeholder="Buscar etiquetas…"
+                      value={labelFilter}
                       onChange={(event) =>
-                        field(
-                          "label_ids",
-                          event.target.checked
-                            ? [...input.label_ids, label.id]
-                            : input.label_ids.filter((id) => id !== label.id),
-                        )
+                        setLabelFilter(event.target.value)
                       }
                     />
-                    <span className="accent-marker">@</span>
-                    {label.name}
-                  </label>
-                ))}
-              </div>
+                    {labelFilter && (
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Limpiar búsqueda de etiquetas"
+                        onClick={() => setLabelFilter("")}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  <div
+                    className="relation-list"
+                    role="group"
+                    aria-label="Etiquetas disponibles"
+                  >
+                    {filteredLabels.map((label) => (
+                      <label key={label.id} className="relation-row">
+                        <input
+                          type="checkbox"
+                          checked={input.label_ids.includes(label.id)}
+                          onChange={(event) =>
+                            toggleLabel(label.id, event.target.checked)
+                          }
+                        />
+                        <span className="accent-marker">@</span>
+                        <span className="relation-title">{label.name}</span>
+                        <NavLink
+                          to={`/label/${label.id}`}
+                          onClick={onClose}
+                          className="relation-goto"
+                          title={`Ir a ${label.name}`}
+                          aria-label={`Ir a la etiqueta ${label.name}`}
+                        >
+                          <ExternalLink size={13} />
+                        </NavLink>
+                      </label>
+                    ))}
+                    {filteredLabels.length === 0 && (
+                      <p className="muted">
+                        Sin coincidencias para «{labelFilter}».
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </fieldset>
           </div>
         </details>
-        <fieldset>
-          <legend>Notas vinculadas</legend>
+        <fieldset className="relation-field">
+          <legend>
+            Notas vinculadas · {selectedNotes.length}/
+            {(notes.data ?? []).length}
+          </legend>
           {notes.isError && (
             <p role="alert">No se pudieron cargar las notas.</p>
           )}
-          <div className="label-options">
-            {(notes.data ?? []).map((note) => (
-              <label key={note.id}>
-                <input
-                  type="checkbox"
-                  checked={(input.note_ids ?? []).includes(note.id)}
-                  onChange={(event) =>
-                    field(
-                      "note_ids",
-                      event.target.checked
-                        ? [...(input.note_ids ?? []), note.id]
-                        : (input.note_ids ?? []).filter(
-                            (identifier) => identifier !== note.id,
-                          ),
-                    )
-                  }
-                />
-                {note.title}
-                <NavLink to={`/notes/${note.id}`}>Abrir</NavLink>
-              </label>
-            ))}
-          </div>
-          {!notes.isPending && !notes.isError && !notes.data?.length && (
-            <p className="muted">Crea tu primera nota desde la app Notas.</p>
+          {selectedNotes.length > 0 && (
+            <div
+              className="relation-chips relation-chips--notes"
+              aria-label="Notas seleccionadas"
+            >
+              {selectedNotes.map((note) => (
+                <span key={note.id} className="relation-chip relation-chip--note">
+                  <NoteKindIcon kind={note.kind} />
+                  <button
+                    type="button"
+                    className="relation-chip-button"
+                    onClick={() => setPreviewId(note.id)}
+                    title="Ver vista previa"
+                  >
+                    {note.title}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label={`Quitar nota ${note.title}`}
+                    onClick={() => toggleNote(note.id, false)}
+                  >
+                    <X size={13} />
+                  </button>
+                </span>
+              ))}
+            </div>
           )}
+          {!notes.isPending && !notes.isError && (
+            <>
+              <div className="relation-search">
+                <Search size={14} aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label="Buscar notas para vincular"
+                  placeholder="Buscar por título, contenido o tipo…"
+                  value={noteFilter}
+                  onChange={(event) => setNoteFilter(event.target.value)}
+                />
+                {noteFilter && (
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Limpiar búsqueda de notas"
+                    onClick={() => setNoteFilter("")}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div
+                className="relation-list"
+                role="group"
+                aria-label="Notas disponibles"
+              >
+                {filteredNotes.map((note) => {
+                  const checked = (input.note_ids ?? []).includes(note.id);
+                  return (
+                    <div key={note.id} className="relation-row">
+                      <input
+                        type="checkbox"
+                        aria-label={`Vincular ${note.title}`}
+                        checked={checked}
+                        onChange={(event) =>
+                          toggleNote(note.id, event.target.checked)
+                        }
+                      />
+                      <NoteKindIcon kind={note.kind} />
+                      <button
+                        type="button"
+                        className="relation-title relation-title--button"
+                        onClick={() => setPreviewId(note.id)}
+                        title="Ver vista previa"
+                      >
+                        {note.title}
+                      </button>
+                      <span className="kind-badge">{noteKindLabel(note.kind)}</span>
+                    </div>
+                  );
+                })}
+                {filteredNotes.length === 0 && (
+                  <p className="muted">
+                    {(notes.data ?? []).length === 0
+                      ? "Crea tu primera nota desde la app Notas."
+                      : `Sin coincidencias para «${noteFilter}».`}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+          {notes.isPending && <p className="muted">Cargando notas…</p>}
         </fieldset>
         {draft.task && <History taskId={draft.task.id} />}
         {error && (
@@ -436,6 +654,114 @@ export function TaskEditor({
           </button>
         </footer>
       </form>
+      {previewNote && (
+        <NotePreview
+          note={previewNote}
+          tasks={candidates.data ?? []}
+          linked={(input.note_ids ?? []).includes(previewNote.id)}
+          onToggle={(checked) => toggleNote(previewNote.id, checked)}
+          onClose={() => setPreviewId(null)}
+          onOpenFull={() => goToNote(previewNote.id)}
+          onOpenTask={goToTask}
+        />
+      )}
+    </Modal>
+  );
+}
+function noteKindLabel(kind: Note["kind"]): string {
+  return kind === "base" ? "Base" : kind === "canvas" ? "Canvas" : "Nota";
+}
+function NoteKindIcon({ kind }: { kind: Note["kind"] }) {
+  const Icon = kind === "base" ? Table2 : kind === "canvas" ? Network : FileText;
+  return (
+    <span className="kind-icon" aria-hidden="true" title={noteKindLabel(kind)}>
+      <Icon size={14} />
+    </span>
+  );
+}
+function NotePreview({
+  note,
+  tasks,
+  linked,
+  onToggle,
+  onClose,
+  onOpenFull,
+  onOpenTask,
+}: {
+  note: Note;
+  tasks: Task[];
+  linked: boolean;
+  onToggle: (checked: boolean) => void;
+  onClose: () => void;
+  onOpenFull: () => void;
+  onOpenTask: (task: Task) => void;
+}) {
+  const excerpt = note.content.trim().slice(0, 1200);
+  const linkedTasks = tasks.filter((task) =>
+    task.note_ids?.includes(note.id),
+  );
+  return (
+    <Modal title={note.title} onClose={onClose}>
+      <div className="editor note-preview">
+        <p className="muted note-preview-meta">
+          <NoteKindIcon kind={note.kind} />
+          {noteKindLabel(note.kind)} · Actualizada{" "}
+          {new Date(note.updated_at).toLocaleString("es-ES")}
+        </p>
+        {excerpt ? (
+          <div className="markdown note-preview-body">
+            <ReactMarkdown>{excerpt}</ReactMarkdown>
+          </div>
+        ) : (
+          <p className="muted">Esta nota aún no tiene contenido.</p>
+        )}
+        {linkedTasks.length > 0 && (
+          <div className="note-preview-tasks">
+            <h3>Tareas vinculadas ({linkedTasks.length})</h3>
+            <div className="linked-task-list">
+              {linkedTasks.map((task) => (
+                <button
+                  key={task.id}
+                  type="button"
+                  className="linked-task"
+                  onClick={() => onOpenTask(task)}
+                  title={`Abrir ${task.title}`}
+                >
+                  <span className="linked-task-dot" aria-hidden="true" />
+                  <span className="linked-task-title">{task.title}</span>
+                  <span className="linked-task-hint">
+                    {task.status === "completed" ? "Completada" : "Abrir"}
+                    <ArrowUpRight size={13} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <footer className="form-footer note-preview-footer">
+          <label className="preview-toggle">
+            <input
+              type="checkbox"
+              checked={linked}
+              onChange={(event) => onToggle(event.target.checked)}
+            />
+            Vinculada a esta tarea
+          </label>
+          <span className="preview-actions">
+            <button type="button" className="secondary" onClick={onClose}>
+              Cerrar
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={onOpenFull}
+            >
+              Ir a la nota completa
+              <ArrowUpRight size={14} />
+            </button>
+          </span>
+        </footer>
+      </div>
     </Modal>
   );
 }

@@ -86,10 +86,8 @@ test("notes persist, navigate wiki links, organize a base and connect canvas car
   page,
 }) => {
   await page.goto("/today");
-  await page
-    .getByRole("navigation", { name: "Aplicaciones" })
-    .getByRole("link", { name: "Notas" })
-    .click();
+  await page.getByRole("button", { name: "Cambiar de aplicación" }).click();
+  await page.getByRole("menuitem", { name: /Notas/ }).click();
   await page.getByRole("button", { name: "Nota", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Título de nota" })
@@ -183,10 +181,8 @@ test("task editor saves note associations and notes show the backlink", async ({
     .fill("Referencia");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.getByRole("status")).toHaveText("Guardado");
-  await page
-    .getByRole("navigation", { name: "Aplicaciones" })
-    .getByRole("link", { name: "Tareas" })
-    .click();
+  await page.getByRole("button", { name: "Cambiar de aplicación" }).click();
+  await page.getByRole("menuitem", { name: /Tareas/ }).click();
   await expect(
     page.getByRole("heading", { name: "Hoy", exact: true }),
   ).toBeVisible();
@@ -197,16 +193,14 @@ test("task editor saves note associations and notes show the backlink", async ({
   await page.getByRole("checkbox", { name: /Referencia/ }).check();
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  await page
-    .getByRole("navigation", { name: "Aplicaciones" })
-    .getByRole("link", { name: "Notas" })
-    .click();
+  await page.getByRole("button", { name: "Cambiar de aplicación" }).click();
+  await page.getByRole("menuitem", { name: /Notas/ }).click();
   await page
     .locator(".notes-sidebar")
     .getByRole("link", { name: "Referencia", exact: true })
     .click();
   await page
-    .getByRole("link", { name: "Preparar propuesta", exact: true })
+    .getByRole("link", { name: /Preparar propuesta/ })
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
@@ -228,7 +222,7 @@ test("mobile navigation and failed saves keep edits", async ({ page }) => {
     page.getByRole("textbox", { name: "Título de nota" }),
   ).toHaveValue("No perder");
   await expect(
-    page.getByRole("navigation", { name: "Aplicaciones" }),
+    page.getByRole("button", { name: "Cambiar de aplicación" }),
   ).toBeVisible();
   expect(
     await page.evaluate(

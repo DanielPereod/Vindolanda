@@ -3,8 +3,8 @@ import { createSaveQueue } from "./autosave";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowUpRight,
   BookOpen,
-  CheckCheck,
   FileText,
   Network,
   Plus,
@@ -14,29 +14,12 @@ import { api, errorMessage, useResource } from "./api";
 import { filterNotes } from "./notes";
 import type { Note, NoteInput, CanvasNode, NoteFolder, NoteLink } from "./notes";
 import { NoteExplorer, NoteTrash } from "./NoteExplorer";
+import { SidebarHeader, SidebarToggle } from "./SidebarToggle";
+import { useSidebarState } from "./useSidebarState";
 import { useAppearance } from "./useAppearance";
 import type { Settings, Task } from "./types";
 import { NoteEditor } from "./NoteEditor";
 
-/** Persistent application navigation shared by task and note workspaces. */
-export function AppSwitcher() {
-  const location = useLocation();
-  return (
-    <nav className="app-switcher" aria-label="Aplicaciones">
-      <NavLink
-        className={!location.pathname.startsWith("/notes") ? "selected" : ""}
-        to="/today"
-      >
-        <CheckCheck size={16} />
-        Tareas
-      </NavLink>
-      <NavLink to="/notes">
-        <BookOpen size={16} />
-        Notas
-      </NavLink>
-    </nav>
-  );
-}
 const icons = { note: FileText, base: Table2, canvas: Network };
 const labels = { note: "Nota", base: "Base", canvas: "Canvas" };
 
@@ -47,6 +30,7 @@ export function NotesApp() {
   const query = useResource<Note[]>("/notes");
   const navigate = useNavigate();
   const location = useLocation();
+  const [navOpen, setNavOpen] = useSidebarState();
   const [search, setSearch] = useState("");
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -110,14 +94,12 @@ export function NotesApp() {
   }
   return (
     <div className="notes-shell">
-      <header className="topbar">
-        <NavLink className="notes-brand" to="/notes">
-          <BookOpen size={22} /> Mi conocimiento
-        </NavLink>
-        <AppSwitcher />
-      </header>
-      <div className="notes-layout">
+      <div className={`notes-layout ${navOpen ? "" : "nav-collapsed"}`}>
         <aside className="notes-sidebar">
+          <SidebarHeader
+            open={navOpen}
+            onToggle={() => setNavOpen(!navOpen)}
+          />
           <div className="eyebrow">MI CONOCIMIENTO</div>
           <h2>Explorador</h2>
           <input
@@ -149,6 +131,15 @@ export function NotesApp() {
           )}
         </aside>
         <main className="notes-main">
+          {!navOpen && (
+            <div className="topbar">
+              <SidebarToggle
+                open={navOpen}
+                floating
+                onToggle={() => setNavOpen(true)}
+              />
+            </div>
+          )}
           <nav className="document-tabs" aria-label="Pestañas abiertas">
             {openTabs.map((identifier) => {
               const tab = notes.find(
@@ -472,13 +463,32 @@ function Document({
         {tasks.isError && (
           <p role="alert">No se pudieron cargar las tareas vinculadas.</p>
         )}
-        {tasks.data
-          ?.filter((task) => task.note_ids?.includes(note.id))
-          .map((task) => (
-            <p key={task.id}>
-              <NavLink to={`/inbox?task=${task.id}`}>{task.title}</NavLink>
+        <div className="linked-task-list">
+          {tasks.data
+            ?.filter((task) => task.note_ids?.includes(note.id))
+            .map((task) => (
+              <NavLink
+                key={task.id}
+                to={`/inbox?task=${task.id}`}
+                className="linked-task"
+                title={`Abrir ${task.title}`}
+              >
+                <span className="linked-task-dot" aria-hidden="true" />
+                <span className="linked-task-title">{task.title}</span>
+                <span className="linked-task-hint">
+                  {task.status === "completed" ? "Completada" : "Abrir"}
+                  <ArrowUpRight size={13} />
+                </span>
+              </NavLink>
+            ))}
+        </div>
+        {!tasks.isPending &&
+          !tasks.isError &&
+          !tasks.data?.some((task) => task.note_ids?.includes(note.id)) && (
+            <p className="muted">
+              Vincula esta nota desde el detalle de una tarea para verla aquí.
             </p>
-          ))}
+          )}
       </section>
     </article>
   );
