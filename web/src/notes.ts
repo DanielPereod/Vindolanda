@@ -5,7 +5,7 @@ export interface NoteInput {
   content: string;
   properties: Record<string, string>;
   nodes: CanvasNode[];
-  edges: { from: string; to: string }[];
+  edges: CanvasEdge[];
   filter: string;
   sort: "title" | "updated_at" | "";
   folder_id?: string | null;
@@ -37,11 +37,28 @@ export interface NoteLink {
   context: string;
   target_deleted: boolean;
 }
+/** Canvas cards are stored notes, canvas-only text cards or media embeds. */
+export type CanvasNodeType = "note" | "text" | "media";
+/** A card side whose midpoint exposes a connection port. */
+export type CanvasSide = "top" | "right" | "bottom" | "left";
+/** Edge connects two cards, remembering which side each arrow leaves and reaches. */
+export interface CanvasEdge {
+  from: string;
+  to: string;
+  fromSide?: CanvasSide;
+  toSide?: CanvasSide;
+}
 export interface CanvasNode {
   id: string;
-  note_id: string;
+  type?: CanvasNodeType;
+  note_id?: string;
+  text?: string;
+  url?: string;
   x: number;
   y: number;
+  width?: number;
+  height?: number;
+  color?: string;
 }
 const wikiPattern = /(```[\s\S]*?```|`[^`]*`)|\[\[([^\]\n]+)\]\]/g;
 /** Extracts unique targets, excluding inline and fenced code. */
@@ -55,7 +72,10 @@ export function wikiTargets(content: string): string[] {
   ];
 }
 /** Uses internal fragment links, leaving raw HTML disabled by the Markdown renderer. */
-export function wikiMarkdown(content: string, links: Pick<NoteLink, "target_title" | "current_title">[] = []): string {
+export function wikiMarkdown(
+  content: string,
+  links: Pick<NoteLink, "target_title" | "current_title">[] = [],
+): string {
   return content.replace(
     wikiPattern,
     (
@@ -66,8 +86,17 @@ export function wikiMarkdown(content: string, links: Pick<NoteLink, "target_titl
       if (code || !target) return original;
       const [title = "", alias] = target.split("|");
       const [noteTitle = "", ...fragment] = title.split("#");
-      const reference = links.find((link) => link.target_title.toLocaleLowerCase() === noteTitle.trim().toLocaleLowerCase());
-      const label = alias || (reference ? reference.current_title + (fragment.length ? `#${fragment.join("#")}` : "") : title);
+      const reference = links.find(
+        (link) =>
+          link.target_title.toLocaleLowerCase() ===
+          noteTitle.trim().toLocaleLowerCase(),
+      );
+      const label =
+        alias ||
+        (reference
+          ? reference.current_title +
+            (fragment.length ? `#${fragment.join("#")}` : "")
+          : title);
       return `[${label.replace(/[[\]]/g, "")}](#/wiki/${encodeURIComponent(title.trim())})`;
     },
   );

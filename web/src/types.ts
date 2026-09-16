@@ -3,6 +3,203 @@ export interface User {
   id: string;
   username: string;
 }
+/** Perfil nutricional único y objetivos diarios. */
+export interface NutritionProfile {
+  weight_kg: number;
+  height_cm: number;
+  age: number;
+  sex: "male" | "female" | "other";
+  activity_level: "sedentary" | "light" | "moderate" | "active" | "very_active";
+  goal: "lose" | "maintain" | "gain";
+  target_calories: number;
+  target_protein_g: number;
+  target_carbs_g: number;
+  target_fat_g: number;
+  target_fiber_g: number;
+  target_water_ml: number;
+  target_mode: "auto" | "manual";
+  updated_at: string;
+}
+/** Alimento del catálogo local, con base de porción y nutrientes. */
+export interface Food {
+  id: string;
+  name: string;
+  brand: string;
+  barcode: string | null;
+  source: "manual" | "openfoodfacts";
+  base_quantity: number;
+  base_unit: "g" | "ml" | "unit";
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  salt_g: number;
+  sodium_mg: number;
+  micronutrients: Record<string, number>;
+  favorite: boolean;
+  created_at: string;
+  updated_at: string;
+}
+export type FoodInput = Omit<
+  Food,
+  "id" | "source" | "created_at" | "updated_at"
+>;
+/** Producto normalizado de Open Food Facts, listo para importar. */
+export type OpenFoodFactsProduct = Omit<FoodInput, "barcode" | "favorite"> & {
+  barcode: string;
+};
+/** Entrada del diario con la nutrición congelada al registrarla. */
+export interface DiaryEntry {
+  id: string;
+  entry_date: string;
+  meal: "breakfast" | "lunch" | "dinner" | "snack";
+  food_id: string | null;
+  plan_item_id: string | null;
+  label: string;
+  quantity: number;
+  unit: "g" | "ml" | "unit";
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  salt_g: number;
+  sodium_mg: number;
+  micronutrients: Record<string, number>;
+  created_at: string;
+}
+export interface DiaryTotals {
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  salt_g: number;
+  sodium_mg: number;
+  micronutrients: Record<string, number>;
+}
+export interface DiaryTargets {
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  water_ml: number;
+}
+export interface DiaryDay {
+  entry_date: string;
+  water_ml: number;
+  entries: DiaryEntry[];
+  totals: DiaryTotals;
+  targets: DiaryTargets;
+}
+/** Ingrediente de una receta con su nutrición escalada. */
+export interface RecipeIngredient {
+  id: string;
+  food_id: string;
+  food_name: string;
+  quantity: number;
+  unit: "g" | "ml" | "unit";
+  note: string;
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  salt_g: number;
+  sodium_mg: number;
+  micronutrients: Record<string, number>;
+}
+export interface Recipe {
+  id: string;
+  name: string;
+  description: string;
+  prep_minutes: number;
+  servings: number;
+  tags: string[];
+  favorite: boolean;
+  ingredients: RecipeIngredient[];
+  totals: DiaryTotals;
+  per_serving: DiaryTotals;
+  created_at: string;
+  updated_at: string;
+}
+export interface RecipeIngredientInput {
+  food_id: string;
+  quantity: number;
+  unit?: string;
+  note?: string;
+}
+export interface RecipeInput {
+  name: string;
+  description: string;
+  prep_minutes: number;
+  servings: number;
+  tags: string[];
+  favorite: boolean;
+  ingredients: RecipeIngredientInput[];
+}
+/** Comida planificada dentro de una semana o plantilla. */
+export interface PlanItem {
+  id: string;
+  day_index: number;
+  meal: DiaryEntry["meal"];
+  recipe_id: string | null;
+  food_id: string | null;
+  label: string;
+  quantity: number;
+  unit: "g" | "ml" | "unit";
+  position: number;
+  calories_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  salt_g: number;
+  sodium_mg: number;
+  micronutrients: Record<string, number>;
+}
+export interface MealPlan {
+  id: string;
+  name: string;
+  week_start: string | null;
+  is_template: boolean;
+  items: PlanItem[];
+  created_at: string;
+  updated_at: string;
+}
+export interface PlanItemInput {
+  day_index: number;
+  meal: DiaryEntry["meal"];
+  recipe_id?: string | null;
+  food_id?: string | null;
+  quantity: number;
+}
+/** Línea de la lista de la compra. */
+export interface ShoppingInput {
+  label: string;
+  quantity: number;
+  unit: "g" | "ml" | "unit";
+  checked: boolean;
+  food_id: string | null;
+}
+export interface ShoppingItem extends ShoppingInput {
+  id: string;
+  source: "manual" | "plan" | "recipe";
+  created_at: string;
+  updated_at: string;
+}
 export interface Project {
   id: string;
   name: string;
@@ -12,7 +209,7 @@ export interface Project {
   parent_project_id: string | null;
   favorite: boolean;
   archived: boolean;
-  default_view: "list";
+  default_view: "list" | "board";
   position: number;
 }
 export interface Section {

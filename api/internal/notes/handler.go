@@ -10,6 +10,18 @@ import (
 // Register attaches authenticated transport adapters; Service owns all mutation logic.
 func Register(router chi.Router, pool *pgxpool.Pool) {
 	service := Service{Pool: pool}
+	registerMetadata(router, service)
+	router.Delete("/notes/trash", func(writer http.ResponseWriter, request *http.Request) {
+		respondEmpty(writer, service.Purge(request.Context(), nil))
+	})
+	router.Delete("/notes/{id}/permanent", func(writer http.ResponseWriter, request *http.Request) {
+		identifier := chi.URLParam(request, "id")
+		respondEmpty(writer, service.Purge(request.Context(), &identifier))
+	})
+	router.Get("/notes/search", func(writer http.ResponseWriter, request *http.Request) {
+		values, failure := Search(request.Context(), pool, request.URL.Query().Get("q"))
+		respond(writer, 200, values, failure)
+	})
 	router.Get("/notes", func(writer http.ResponseWriter, request *http.Request) {
 		values, failure := List(request.Context(), pool, request.URL.Query().Get("deleted") == "true")
 		respond(writer, 200, values, failure)

@@ -10,7 +10,9 @@ import {
 describe("note semantics", () => {
   it("renders renamed targets using stored identity without changing explicit aliases", () => {
     const links = [{ target_title: "Old", current_title: "New" }];
-    expect(wikiMarkdown("[[Old]] [[Old|Alias]] [[Old#Heading]]", links)).toBe("[New](#/wiki/Old) [Alias](#/wiki/Old) [New#Heading](#/wiki/Old%23Heading)");
+    expect(wikiMarkdown("[[Old]] [[Old|Alias]] [[Old#Heading]]", links)).toBe(
+      "[New](#/wiki/Old) [Alias](#/wiki/Old) [New#Heading](#/wiki/Old%23Heading)",
+    );
   });
   it("keeps code fences intact when editing or moving blocks", () => {
     expect(splitBlocks("Intro\n\n```js\nfirst\n\nsecond\n```\n\nEnd")).toEqual([

@@ -57,7 +57,7 @@ func run() error {
 		address = "127.0.0.1:8080"
 	}
 	secure := os.Getenv("COOKIE_SECURE") != "false"
-	httpServer := &http.Server{Addr: address, Handler: server.New(pool, server.Config{Origin: origin, SecureCookies: secure}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	httpServer := &http.Server{Addr: address, Handler: server.New(pool, server.Config{Origin: origin, SecureCookies: secure, OpenFoodFactsUserAgent: os.Getenv("OPENFOODFACTS_USER_AGENT")}), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	failures := make(chan error, 1)
 	go func() { slog.Info("API listening", "address", address); failures <- httpServer.ListenAndServe() }()
 	select {

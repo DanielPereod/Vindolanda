@@ -10,10 +10,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 	"net/http"
+	"personal-life/api/internal/attachments"
 	"personal-life/api/internal/auth"
 	"personal-life/api/internal/core"
 	"personal-life/api/internal/labels"
 	"personal-life/api/internal/notes"
+	"personal-life/api/internal/nutrition"
 	"personal-life/api/internal/projects"
 	"personal-life/api/internal/sections"
 	"personal-life/api/internal/settings"
@@ -25,6 +27,10 @@ import (
 type Config struct {
 	Origin        string
 	SecureCookies bool
+	// OpenFoodFactsUserAgent identifies the installation to Open Food Facts.
+	OpenFoodFactsUserAgent string
+	// OpenFoodFactsClient overrides the upstream client, primarily for tests.
+	OpenFoodFactsClient nutrition.OpenFoodFactsClient
 }
 
 // New returns a concurrent-safe HTTP handler backed by the supplied pool.
@@ -64,6 +70,10 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		}{"ok"})
 	})
 	authentication := &auth.Handler{Pool: pool, Secure: config.SecureCookies}
+	foods := config.OpenFoodFactsClient
+	if foods == nil {
+		foods = nutrition.NewOpenFoodFactsClient(config.OpenFoodFactsUserAgent)
+	}
 	router.Route("/api/v1", func(api chi.Router) {
 		authentication.Register(api)
 		api.Group(func(private chi.Router) {
@@ -74,6 +84,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 			labels.Register(private, pool)
 			tasks.Register(private, pool)
 			notes.Register(private, pool)
+			attachments.Register(private, pool)
+			nutrition.Register(private, pool, foods)
 		})
 	})
 	return router

@@ -1,18 +1,28 @@
 // Package notes owns Markdown documents, saved property views and canvas layouts.
 package notes
 
-// Node places a note reference at pixel coordinates in a canvas.
+// Node is a canvas card. Type is note (a reference), text (canvas-only Markdown)
+// or media (image/video URL). Notes use NoteID; text uses Text; media uses URL.
 type Node struct {
 	ID     string  `json:"id"`
-	NoteID string  `json:"note_id"`
+	Type   string  `json:"type"`
+	NoteID string  `json:"note_id,omitempty"`
+	Text   string  `json:"text,omitempty"`
+	URL    string  `json:"url,omitempty"`
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+	Color  string  `json:"color,omitempty"`
 }
 
-// Edge connects two node identifiers in the same canvas.
+// Edge connects two node identifiers in the same canvas. FromSide and ToSide
+// are optional card sides (top, right, bottom, left) used as arrow anchors.
 type Edge struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	FromSide string `json:"fromSide,omitempty"`
+	ToSide   string `json:"toSide,omitempty"`
 }
 
 // Input is a complete editable document. Kind is note, base or canvas.

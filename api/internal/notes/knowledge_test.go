@@ -52,6 +52,25 @@ func TestKnowledgeTransactions(testingContext *testing.T) {
 	}
 	defer isolatedPool.Close()
 	service := notes.Service{Pool: isolatedPool}
+	testTypedMetadata(testingContext, requestContext, isolatedPool, service)
+	var legacyID string
+	if failure = isolatedPool.QueryRow(requestContext, "INSERT INTO notes(title,kind,content) VALUES('Legacy note','note','[[Legacy destination]]') RETURNING id").Scan(&legacyID); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	if failure = service.BackfillLinks(requestContext); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	legacyLinks, failure := notes.ListLinks(requestContext, isolatedPool, legacyID, false)
+	if failure != nil || len(legacyLinks) != 1 {
+		testingContext.Fatal("legacy index was not backfilled", failure)
+	}
+	if failure = service.BackfillLinks(requestContext); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	repeatedLinks, failure := notes.ListLinks(requestContext, isolatedPool, legacyID, false)
+	if failure != nil || len(repeatedLinks) != 1 || repeatedLinks[0].ID != legacyLinks[0].ID {
+		testingContext.Fatal("backfill was not resumable/idempotent", failure)
+	}
 	root, failure := service.SaveFolder(requestContext, "", notes.FolderInput{Name: "Knowledge test root"})
 	if failure != nil {
 		testingContext.Fatal(failure)
@@ -96,6 +115,17 @@ func TestKnowledgeTransactions(testingContext *testing.T) {
 	if _, failure = notes.Get(requestContext, isolatedPool, target.ID); failure == nil {
 		testingContext.Fatal("trashed note is still active")
 	}
+	replacement, failure := service.Save(requestContext, "", notes.Input{Title: target.Title, Kind: "note"})
+	if failure != nil {
+		testingContext.Fatal("trashed title prevented new note", failure)
+	}
+	if failure = service.Trash(requestContext, target.ID, true); failure == nil {
+		testingContext.Fatal("restore overwrote a conflicting title")
+	}
+	replacement.Title = "Replacement note"
+	if _, failure = service.Save(requestContext, replacement.ID, replacement.Input); failure != nil {
+		testingContext.Fatal(failure)
+	}
 	if failure = service.Trash(requestContext, target.ID, true); failure != nil {
 		testingContext.Fatal(failure)
 	}
@@ -115,5 +145,45 @@ func TestKnowledgeTransactions(testingContext *testing.T) {
 	}
 	if failure = service.DeleteFolder(requestContext, root.ID); failure == nil {
 		testingContext.Fatal("nonempty folder deleted")
+	}
+	source.FolderID = nil
+	source.Content = "Quantum orchard [[Knowledge test target]]"
+	if _, failure = service.Save(requestContext, source.ID, source.Input); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	matches, failure := notes.Search(requestContext, isolatedPool, "quantum orchard")
+	if failure != nil || len(matches) != 1 || matches[0].ID != source.ID {
+		testingContext.Fatalf("indexed search failed: %#v %v", matches, failure)
+	}
+	if failure = service.Trash(requestContext, source.ID, false); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	matches, failure = notes.Search(requestContext, isolatedPool, "quantum")
+	if failure != nil || len(matches) != 0 {
+		testingContext.Fatal("search exposed trash", failure)
+	}
+	if failure = service.Purge(requestContext, &target.ID); failure == nil {
+		testingContext.Fatal("permanent deletion accepted an active note")
+	}
+	canvas, failure := service.Save(requestContext, "", notes.Input{Title: "Deletion canvas", Kind: "canvas", Nodes: []notes.Node{{ID: "target", NoteID: target.ID, X: 1, Y: 1}}})
+	if failure != nil {
+		testingContext.Fatal(failure)
+	}
+	if failure = service.Trash(requestContext, target.ID, false); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	if failure = service.Purge(requestContext, &target.ID); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	canvas, failure = notes.Get(requestContext, isolatedPool, canvas.ID)
+	if failure != nil || len(canvas.Nodes) != 0 {
+		testingContext.Fatal("permanent deletion left canvas references", failure)
+	}
+	if failure = service.Purge(requestContext, nil); failure != nil {
+		testingContext.Fatal(failure)
+	}
+	trash, failure := notes.List(requestContext, isolatedPool, true)
+	if failure != nil || len(trash) != 0 {
+		testingContext.Fatal("empty trash failed", failure)
 	}
 }

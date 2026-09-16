@@ -10,7 +10,7 @@ func validate(requestContext context.Context, database core.Database, identifier
 	if len(strings.TrimSpace(value.Name)) == 0 || len(value.Name) > 200 {
 		return core.Invalid("Name is required and must fit the length limit")
 	}
-	if !core.ValidColor(value.Color) || value.DefaultView != "list" {
+	if !core.ValidColor(value.Color) || (value.DefaultView != "list" && value.DefaultView != "board") {
 		return core.Invalid("Invalid color or view")
 	}
 	if value.ParentProjectID == nil {

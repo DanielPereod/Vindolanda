@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "./api";
 import type { Label, Project, Section } from "./types";
 import { Modal } from "./Modal";
+import { Dropdown } from "./Dropdown";
 export type EntityDraft =
   | { kind: "projects"; value?: Project }
   | { kind: "sections"; value?: Section; projectId: string }
@@ -104,19 +105,21 @@ export function EntityEditor({
             </label>
             <label>
               Proyecto principal
-              <select
+              <Dropdown
+                ariaLabel="Proyecto principal"
                 value={parent}
-                onChange={(event) => setParent(event.target.value)}
-              >
-                <option value="">Ninguno</option>
-                {projects
-                  .filter((item) => item.id !== value?.id)
-                  .map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </select>
+                searchPlaceholder="Buscar proyecto…"
+                onChange={setParent}
+                options={[
+                  { value: "", label: "Ninguno" },
+                  ...projects
+                    .filter((item) => item.id !== value?.id)
+                    .map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                    })),
+                ]}
+              />
             </label>
             <label className="checkbox-label">
               <input

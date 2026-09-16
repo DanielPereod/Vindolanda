@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "./api";
 import type { Settings } from "./types";
 import { ACCENT_OPTIONS } from "./appearance";
+import { Dropdown } from "./Dropdown";
 export function SettingsPage({ settings }: { settings: Settings }) {
   const [value, setValue] = useState(settings);
   const [message, setMessage] = useState("");
@@ -55,79 +56,98 @@ export function SettingsPage({ settings }: { settings: Settings }) {
           </label>
           <label>
             Idioma
-            <select value={value.language} disabled>
-              <option value="es">Español</option>
-            </select>
+            <Dropdown
+              ariaLabel="Idioma"
+              value={value.language}
+              disabled
+              searchable={false}
+              options={[{ value: "es", label: "Español" }]}
+              onChange={() => undefined}
+            />
           </label>
           <label>
             Primer día de la semana
-            <select
-              value={value.week_start}
-              onChange={(event) =>
-                setValue({ ...value, week_start: Number(event.target.value) })
+            <Dropdown
+              ariaLabel="Primer día de la semana"
+              value={String(value.week_start)}
+              searchable={false}
+              onChange={(next) =>
+                setValue({ ...value, week_start: Number(next) })
               }
-            >
-              <option value="1">Lunes</option>
-              <option value="0">Domingo</option>
-            </select>
+              options={[
+                { value: "1", label: "Lunes" },
+                { value: "0", label: "Domingo" },
+              ]}
+            />
           </label>
           <label>
             Formato horario
-            <select
+            <Dropdown
+              ariaLabel="Formato horario"
               value={value.hour_format}
-              onChange={(event) =>
+              searchable={false}
+              onChange={(next) =>
                 setValue({
                   ...value,
-                  hour_format: event.target.value === "12" ? "12" : "24",
+                  hour_format: next === "12" ? "12" : "24",
                 })
               }
-            >
-              <option value="24">24 horas</option>
-              <option value="12">12 horas</option>
-            </select>
+              options={[
+                { value: "24", label: "24 horas" },
+                { value: "12", label: "12 horas" },
+              ]}
+            />
           </label>
           <label>
             Formato de fecha
-            <select
+            <Dropdown
+              ariaLabel="Formato de fecha"
               value={value.date_format}
-              onChange={(event) =>
+              searchable={false}
+              onChange={(next) =>
                 setValue({
                   ...value,
                   date_format:
-                    event.target.value === "YYYY-MM-DD"
-                      ? "YYYY-MM-DD"
-                      : "DD/MM/YYYY",
+                    next === "YYYY-MM-DD" ? "YYYY-MM-DD" : "DD/MM/YYYY",
                 })
               }
-            >
-              <option>DD/MM/YYYY</option>
-              <option>YYYY-MM-DD</option>
-            </select>
+              options={[
+                { value: "DD/MM/YYYY", label: "DD/MM/YYYY" },
+                { value: "YYYY-MM-DD", label: "YYYY-MM-DD" },
+              ]}
+            />
           </label>
           <label>
             Tema
-            <select
+            <Dropdown
+              ariaLabel="Tema"
               value={value.theme}
-              onChange={(event) =>
+              searchable={false}
+              onChange={(next) =>
                 setValue({
                   ...value,
                   theme:
-                    event.target.value === "dark"
+                    next === "dark"
                       ? "dark"
-                      : event.target.value === "light"
+                      : next === "light"
                         ? "light"
                         : "system",
                 })
               }
-            >
-              <option value="system">Sistema</option>
-              <option value="light">Claro</option>
-              <option value="dark">Oscuro</option>
-            </select>
+              options={[
+                { value: "system", label: "Sistema" },
+                { value: "light", label: "Claro" },
+                { value: "dark", label: "Oscuro" },
+              ]}
+            />
           </label>
           <div className="accent-field">
             <span>Color de acento</span>
-            <div className="accent-options" role="group" aria-label="Color de acento">
+            <div
+              className="accent-options"
+              role="group"
+              aria-label="Color de acento"
+            >
               {ACCENT_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -148,18 +168,19 @@ export function SettingsPage({ settings }: { settings: Settings }) {
           </div>
           <label>
             Orden predeterminado
-            <select
+            <Dropdown
+              ariaLabel="Orden predeterminado"
               value={value.default_sort}
-              onChange={(event) =>
-                setValue({ ...value, default_sort: event.target.value })
-              }
-            >
-              <option value="manual">Manual</option>
-              <option value="date">Fecha</option>
-              <option value="priority">Prioridad</option>
-              <option value="created">Fecha de creación</option>
-              <option value="name">Nombre</option>
-            </select>
+              searchable={false}
+              onChange={(next) => setValue({ ...value, default_sort: next })}
+              options={[
+                { value: "manual", label: "Manual" },
+                { value: "date", label: "Fecha" },
+                { value: "priority", label: "Prioridad" },
+                { value: "created", label: "Fecha de creación" },
+                { value: "name", label: "Nombre" },
+              ]}
+            />
           </label>
         </div>
         <button className="primary" disabled={pending}>

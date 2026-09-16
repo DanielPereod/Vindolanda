@@ -14,6 +14,7 @@ ALTER TABLE notes ADD COLUMN deleted_at timestamptz;
 ALTER TABLE notes ADD COLUMN metadata_version integer NOT NULL DEFAULT 0;
 CREATE INDEX notes_folder ON notes(folder_id) WHERE deleted_at IS NULL;
 CREATE INDEX notes_trash ON notes(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX notes_metadata_pending ON notes(id) WHERE metadata_version=0;
 CREATE TABLE note_links (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  source_note_id uuid NOT NULL REFERENCES notes(id) ON DELETE CASCADE,

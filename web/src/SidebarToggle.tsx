@@ -24,8 +24,8 @@ export function SidebarToggle({
   );
 }
 
-/** Cabecera compartida de las barras laterales: selector + colapsar. */
-export function SidebarHeader({
+/** Pie compartido de las barras laterales: selector de aplicación + colapsar. */
+export function SidebarFooter({
   open,
   onToggle,
 }: {
@@ -33,7 +33,7 @@ export function SidebarHeader({
   onToggle: () => void;
 }) {
   return (
-    <div className="sidebar-top">
+    <div className="sidebar-footer">
       <AppSwitcher />
       <SidebarToggle open={open} onToggle={onToggle} />
     </div>

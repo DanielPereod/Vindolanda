@@ -16,4 +16,14 @@ Use failing regression tests before implementation. Run `make verify` and the is
 
 ## Current constraints
 
-The existing API loads the document collection and resolves wiki links by title. It does not yet satisfy the target of 100,000 notes, stable link identity, typed properties or the complete plugin architecture. A frontend redesign alone must not be described as completing those requirements.
+The editor is continuous with debounced autosave. Virtual folders support nesting, rename, movement and empty-folder deletion. Notes support folder assignment, trash, restoration and permanent deletion. A transaction removes Canvas references when deleting notes permanently. Active titles are unique; a restore that conflicts with an active title rolls back without replacing either note.
+
+Wiki occurrences are now indexed in PostgreSQL with nullable target IDs. Existing bindings survive renames and subsequent edits of the source. Backlinks and outgoing links are queried from this index. Creating or restoring a matching note resolves pending references. Migration backfill processes 100 documents per transaction and resumes from metadata versions after interruption.
+
+Global search uses a generated weighted tsvector and a partial GIN index over active notes. It supports words, phrases, OR and exclusions, returning at most 100 results. A fuzzy Quick Switcher and dynamic command registry provide Ctrl/Cmd+O, Ctrl/Cmd+P and Ctrl/Cmd+Shift+F entry points.
+
+The explorer, Bases and Quick Switcher still load/use the active document collection. The application does not yet meet the 100,000-note target. Pagination, typed properties, normalized tags and aliases, the complete query language, Live Preview, heading/block navigation, transclusion and the permission-scoped plugin API remain pending. Indexed embed metadata does not yet render transclusions. Quick Switcher recency is session data; workspace persistence is still pending.
+
+Canvas is now an immersive full-viewport workspace: cards are note references, canvas-only Markdown text or media embeds (image, video or YouTube). It supports wheel zoom, middle-button panning, fit/reset controls and a bottom creation toolbar. Image attachments can be pasted, dropped or uploaded and become media cards; connection drawing UI and card resizing/grouping remain pending.
+
+Migrations 00004, 00006 and 00007 add the knowledge schema, full-text index and active-title uniqueness. Run the normal migration command before starting the updated API. This implementation does not apply migrations to the running application or deploy it.

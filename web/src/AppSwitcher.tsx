@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, CheckCheck, ChevronRight } from "lucide-react";
+import {
+  BookOpen,
+  CheckCheck,
+  ChevronRight,
+  Salad,
+  Vault,
+} from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 const TASKS_APP = {
@@ -7,7 +13,8 @@ const TASKS_APP = {
   name: "Tareas",
   description: "Un poco más de claridad",
   to: "/today",
-  match: (path: string) => !path.startsWith("/notes"),
+  match: (path: string) =>
+    !path.startsWith("/notes") && !path.startsWith("/nutrition"),
   Icon: CheckCheck,
 };
 
@@ -20,13 +27,22 @@ const NOTES_APP = {
   Icon: BookOpen,
 };
 
-const APPS = [TASKS_APP, NOTES_APP];
+const NUTRITION_APP = {
+  id: "nutrition",
+  name: "Nutrición",
+  description: "Come con intención",
+  to: "/nutrition",
+  match: (path: string) => path.startsWith("/nutrition"),
+  Icon: Salad,
+};
+
+const APPS = [TASKS_APP, NOTES_APP, NUTRITION_APP];
 
 export function AppSwitcher() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const active = location.pathname.startsWith("/notes") ? NOTES_APP : TASKS_APP;
+  const active = APPS.find((app) => app.match(location.pathname)) ?? TASKS_APP;
 
   useEffect(() => {
     setOpen(false);
@@ -48,7 +64,7 @@ export function AppSwitcher() {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open ]);
+  }, [open]);
 
   return (
     <div className="workspace-switcher" ref={ref}>
@@ -59,9 +75,7 @@ export function AppSwitcher() {
         aria-label="Cambiar de aplicación"
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="avatar" aria-hidden="true">
-          {active.name.slice(0, 1).toUpperCase()}
-        </span>
+        <Vault className="workspace-vault-icon" size={16} aria-hidden="true" />
         <span className="workspace-name">{active.name}</span>
         <ChevronRight
           size={14}

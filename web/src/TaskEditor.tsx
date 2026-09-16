@@ -23,6 +23,7 @@ import type {
   TaskInput,
 } from "./types";
 import { Modal } from "./Modal";
+import { Dropdown } from "./Dropdown";
 import { parseQuickAdd, quickAddTargets } from "./quickAdd";
 import { QuickAddTitle } from "./QuickAddTitle";
 import { formatDate } from "./dates";
@@ -30,7 +31,10 @@ import { formatDate } from "./dates";
 export interface TaskDraft {
   task?: Task;
   projectId?: string | null;
+  sectionId?: string | null;
   parent?: Task;
+  dueDate?: string | null;
+  dueTime?: string | null;
 }
 export function TaskEditor({
   draft,
@@ -71,11 +75,11 @@ export function TaskEditor({
           title: "",
           description: "",
           project_id: draft.parent?.project_id ?? draft.projectId ?? null,
-          section_id: draft.parent?.section_id ?? null,
+          section_id: draft.parent?.section_id ?? draft.sectionId ?? null,
           parent_task_id: draft.parent?.id ?? null,
           priority: 4,
-          due_date: null,
-          due_time: null,
+          due_date: draft.dueDate ?? null,
+          due_time: draft.dueDate ? (draft.dueTime ?? null) : null,
           label_ids: [],
           note_ids: [],
         },
@@ -113,9 +117,7 @@ export function TaskEditor({
   const filteredLabels = useMemo(
     () =>
       availableLabels
-        .filter((label) =>
-          label.name.toLocaleLowerCase().includes(labelQuery),
-        )
+        .filter((label) => label.name.toLocaleLowerCase().includes(labelQuery))
         .sort((left, right) => left.name.localeCompare(right.name)),
     [availableLabels, labelQuery],
   );
@@ -333,89 +335,91 @@ export function TaskEditor({
             <div className="form-grid">
               <label>
                 Proyecto
-                <select
-                  aria-label="Proyecto"
+                <Dropdown
+                  ariaLabel="Proyecto"
                   value={input.project_id ?? ""}
-                  onChange={(event) =>
+                  searchPlaceholder="Buscar proyecto…"
+                  onChange={(next) =>
                     setInput((current) => ({
                       ...current,
-                      project_id: event.target.value || null,
+                      project_id: next || null,
                       section_id: null,
                       parent_task_id: null,
                     }))
                   }
-                >
-                  <option value="">Bandeja de entrada</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                      {project.archived ? " (archivado)" : ""}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "Bandeja de entrada" },
+                    ...projects.map((project) => ({
+                      value: project.id,
+                      label: project.name,
+                      hint: project.archived ? "archivado" : undefined,
+                    })),
+                  ]}
+                />
               </label>
               <label>
                 Sección
-                <select
-                  aria-label="Sección"
+                <Dropdown
+                  ariaLabel="Sección"
                   value={input.section_id ?? ""}
-                  onChange={(event) =>
+                  searchPlaceholder="Buscar sección…"
+                  onChange={(next) =>
                     setInput((current) => ({
                       ...current,
-                      section_id: event.target.value || null,
+                      section_id: next || null,
                       parent_task_id: null,
                     }))
                   }
-                >
-                  <option value="">Sin sección</option>
-                  {sections
-                    .filter(
-                      (section) => section.project_id === input.project_id,
-                    )
-                    .map((section) => (
-                      <option key={section.id} value={section.id}>
-                        {section.name}
-                      </option>
-                    ))}
-                </select>
+                  options={[
+                    { value: "", label: "Sin sección" },
+                    ...sections
+                      .filter(
+                        (section) => section.project_id === input.project_id,
+                      )
+                      .map((section) => ({
+                        value: section.id,
+                        label: section.name,
+                      })),
+                  ]}
+                />
               </label>
               <label>
                 Prioridad
-                <select
-                  aria-label="Prioridad"
-                  value={input.priority}
-                  onChange={(event) =>
-                    field("priority", Number(event.target.value))
-                  }
-                >
-                  <option value="1">P1 · Máxima</option>
-                  <option value="2">P2 · Alta</option>
-                  <option value="3">P3 · Media</option>
-                  <option value="4">P4 · Normal</option>
-                </select>
+                <Dropdown
+                  ariaLabel="Prioridad"
+                  value={String(input.priority)}
+                  searchable={false}
+                  onChange={(next) => field("priority", Number(next))}
+                  options={[
+                    { value: "1", label: "P1 · Máxima" },
+                    { value: "2", label: "P2 · Alta" },
+                    { value: "3", label: "P3 · Media" },
+                    { value: "4", label: "P4 · Normal" },
+                  ]}
+                />
               </label>
               <label>
                 Tarea principal
-                <select
+                <Dropdown
+                  ariaLabel="Tarea principal"
                   value={input.parent_task_id ?? ""}
-                  onChange={(event) =>
-                    field("parent_task_id", event.target.value || null)
-                  }
-                >
-                  <option value="">Ninguna</option>
-                  {(candidates.data ?? [])
-                    .filter(
-                      (task) =>
-                        task.id !== draft.task?.id &&
-                        task.project_id === input.project_id &&
-                        task.section_id === input.section_id,
-                    )
-                    .map((task) => (
-                      <option key={task.id} value={task.id}>
-                        {task.title}
-                      </option>
-                    ))}
-                </select>
+                  searchPlaceholder="Buscar tarea…"
+                  onChange={(next) => field("parent_task_id", next || null)}
+                  options={[
+                    { value: "", label: "Ninguna" },
+                    ...(candidates.data ?? [])
+                      .filter(
+                        (task) =>
+                          task.id !== draft.task?.id &&
+                          task.project_id === input.project_id &&
+                          task.section_id === input.section_id,
+                      )
+                      .map((task) => ({
+                        value: task.id,
+                        label: task.title,
+                      })),
+                  ]}
+                />
               </label>
               <label>
                 Fecha
@@ -486,9 +490,7 @@ export function TaskEditor({
                       aria-label="Buscar etiquetas"
                       placeholder="Buscar etiquetas…"
                       value={labelFilter}
-                      onChange={(event) =>
-                        setLabelFilter(event.target.value)
-                      }
+                      onChange={(event) => setLabelFilter(event.target.value)}
                     />
                     {labelFilter && (
                       <button
@@ -553,7 +555,10 @@ export function TaskEditor({
               aria-label="Notas seleccionadas"
             >
               {selectedNotes.map((note) => (
-                <span key={note.id} className="relation-chip relation-chip--note">
+                <span
+                  key={note.id}
+                  className="relation-chip relation-chip--note"
+                >
                   <NoteKindIcon kind={note.kind} />
                   <button
                     type="button"
@@ -623,7 +628,9 @@ export function TaskEditor({
                       >
                         {note.title}
                       </button>
-                      <span className="kind-badge">{noteKindLabel(note.kind)}</span>
+                      <span className="kind-badge">
+                        {noteKindLabel(note.kind)}
+                      </span>
                     </div>
                   );
                 })}
@@ -672,7 +679,8 @@ function noteKindLabel(kind: Note["kind"]): string {
   return kind === "base" ? "Base" : kind === "canvas" ? "Canvas" : "Nota";
 }
 function NoteKindIcon({ kind }: { kind: Note["kind"] }) {
-  const Icon = kind === "base" ? Table2 : kind === "canvas" ? Network : FileText;
+  const Icon =
+    kind === "base" ? Table2 : kind === "canvas" ? Network : FileText;
   return (
     <span className="kind-icon" aria-hidden="true" title={noteKindLabel(kind)}>
       <Icon size={14} />
@@ -697,9 +705,7 @@ function NotePreview({
   onOpenTask: (task: Task) => void;
 }) {
   const excerpt = note.content.trim().slice(0, 1200);
-  const linkedTasks = tasks.filter((task) =>
-    task.note_ids?.includes(note.id),
-  );
+  const linkedTasks = tasks.filter((task) => task.note_ids?.includes(note.id));
   return (
     <Modal title={note.title} onClose={onClose}>
       <div className="editor note-preview">
@@ -751,11 +757,7 @@ function NotePreview({
             <button type="button" className="secondary" onClick={onClose}>
               Cerrar
             </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={onOpenFull}
-            >
+            <button type="button" className="primary" onClick={onOpenFull}>
               Ir a la nota completa
               <ArrowUpRight size={14} />
             </button>

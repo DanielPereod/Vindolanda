@@ -13,8 +13,38 @@ import (
 // All mutations serialize structural changes and roll back both content and derived links.
 type Service struct{ Pool *pgxpool.Pool }
 
+// Purge permanently removes trashed notes. Nil selects the complete trash.
+// Canvas references are removed in the same transaction; source links and task links
+// cascade through foreign keys, while incoming references become unresolved.
+func (service Service) Purge(requestContext context.Context, identifier *string) error {
+	_, failure := core.Mutate(requestContext, service.Pool, func(transaction pgx.Tx) (bool, error) {
+		if identifier != nil {
+			var eligible bool
+			failure := transaction.QueryRow(requestContext, "SELECT EXISTS(SELECT 1 FROM notes WHERE id=$1 AND deleted_at IS NOT NULL)", *identifier).Scan(&eligible)
+			if failure != nil {
+				return false, failure
+			}
+			if !eligible {
+				return false, core.Invalid("Only trashed notes can be permanently deleted")
+			}
+		}
+		_, failure := transaction.Exec(requestContext, `WITH targets AS (SELECT id::text FROM notes WHERE deleted_at IS NOT NULL AND ($1::uuid IS NULL OR id=$1)),
+  affected AS (SELECT canvas.id,array_agg(node->>'id') AS node_ids FROM notes canvas CROSS JOIN LATERAL jsonb_array_elements(canvas.nodes) node JOIN targets ON node->>'note_id'=targets.id GROUP BY canvas.id)
+  UPDATE notes canvas SET nodes=COALESCE((SELECT jsonb_agg(node) FROM jsonb_array_elements(canvas.nodes) node WHERE NOT (node->>'id'=ANY(affected.node_ids))),'[]'::jsonb),
+  edges=COALESCE((SELECT jsonb_agg(edge) FROM jsonb_array_elements(canvas.edges) edge WHERE NOT (edge->>'from'=ANY(affected.node_ids) OR edge->>'to'=ANY(affected.node_ids))),'[]'::jsonb),updated_at=now()
+  FROM affected WHERE canvas.id=affected.id`, identifier)
+		if failure != nil {
+			return false, failure
+		}
+		_, failure = transaction.Exec(requestContext, "DELETE FROM notes WHERE deleted_at IS NOT NULL AND ($1::uuid IS NULL OR id=$1)", identifier)
+		return failure == nil, failure
+	})
+	return failure
+}
+
 // Save creates or replaces an active document, reindexing only changed Markdown.
 func (service Service) Save(requestContext context.Context, identifier string, input Input) (Note, error) {
+	propertiesProvided := input.Properties != nil
 	input = normalize(input)
 	if failure := validate(input); failure != nil {
 		return Note{}, failure
@@ -27,6 +57,9 @@ func (service Service) Save(requestContext context.Context, identifier string, i
 				return Note{}, failure
 			}
 			previous = value
+			if !propertiesProvided {
+				input.Properties = previous.Properties
+			}
 		}
 		if failure := validateNoteReferences(requestContext, transaction, input); failure != nil {
 			return Note{}, failure
@@ -34,6 +67,11 @@ func (service Service) Save(requestContext context.Context, identifier string, i
 		note, failure := writeNote(requestContext, transaction, identifier, input)
 		if failure != nil {
 			return Note{}, failure
+		}
+		if propertiesProvided {
+			if failure = syncLegacyProperties(requestContext, transaction, note); failure != nil {
+				return Note{}, failure
+			}
 		}
 		if identifier == "" || previous.Content != note.Content {
 			if failure = indexLinks(requestContext, transaction, note); failure != nil {
@@ -43,7 +81,12 @@ func (service Service) Save(requestContext context.Context, identifier string, i
 		if failure = resolveLinks(requestContext, transaction, note); failure != nil {
 			return Note{}, failure
 		}
-		return note, nil
+		if identifier == "" || previous.Content != note.Content || propertiesProvided {
+			if failure = indexTags(requestContext, transaction, note); failure != nil {
+				return Note{}, failure
+			}
+		}
+		return Get(requestContext, transaction, note.ID)
 	})
 }
 
@@ -55,6 +98,9 @@ func normalize(input Input) Input {
 	if input.Nodes == nil {
 		input.Nodes = []Node{}
 	}
+	for index := range input.Nodes {
+		input.Nodes[index].Type = normalizeNodeType(input.Nodes[index].Type)
+	}
 	if input.Edges == nil {
 		input.Edges = []Edge{}
 	}
@@ -64,7 +110,12 @@ func normalize(input Input) Input {
 func validateNoteReferences(requestContext context.Context, database core.Database, input Input) error {
 	identifiers := make([]string, 0, len(input.Nodes))
 	for _, node := range input.Nodes {
-		identifiers = append(identifiers, node.NoteID)
+		if normalizeNodeType(node.Type) == nodeTypeNote {
+			identifiers = append(identifiers, node.NoteID)
+		}
+	}
+	if len(identifiers) == 0 {
+		return nil
 	}
 	var valid bool
 	failure := database.QueryRow(requestContext, `SELECT NOT EXISTS(SELECT 1 FROM unnest($1::uuid[]) requested(id) WHERE NOT EXISTS(SELECT 1 FROM notes WHERE notes.id=requested.id AND kind='note' AND deleted_at IS NULL))`, identifiers).Scan(&valid)
@@ -137,12 +188,15 @@ func (service Service) Trash(requestContext context.Context, identifier string, 
 func (service Service) BackfillLinks(requestContext context.Context) error {
 	for {
 		count, failure := core.Mutate(requestContext, service.Pool, func(transaction pgx.Tx) (int, error) {
-			batch, failure := core.List[Note](requestContext, transaction, "SELECT to_jsonb(note) FROM notes note WHERE metadata_version=0 ORDER BY id LIMIT 100")
+			batch, failure := core.List[Note](requestContext, transaction, "SELECT to_jsonb(note) FROM notes note WHERE metadata_version<2 ORDER BY id LIMIT 100")
 			if failure != nil {
 				return 0, failure
 			}
 			for _, note := range batch {
 				if failure = indexLinks(requestContext, transaction, note); failure != nil {
+					return 0, failure
+				}
+				if failure = indexTags(requestContext, transaction, note); failure != nil {
 					return 0, failure
 				}
 			}

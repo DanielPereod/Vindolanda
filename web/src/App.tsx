@@ -1,23 +1,27 @@
 import { useAppearance } from "./useAppearance";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import {
+  closestCenter,
   DndContext,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import {
   ArrowUpRight,
+  Calendar,
   CalendarDays,
   Check,
   CheckCheck,
   Folder,
+  GripVertical,
   Inbox,
   Leaf,
   LogOut,
@@ -37,12 +41,24 @@ import type { TaskDraft } from "./TaskEditor";
 import { EntityEditor } from "./EntityEditor";
 import type { EntityDraft } from "./EntityEditor";
 import { TaskList, DropArea, ScheduledTaskList } from "./TaskList";
+import { CalendarView } from "./CalendarView";
+import { KanbanBoard, ProjectGroupedList } from "./ProjectViews";
 import { SettingsPage } from "./SettingsPage";
-import { NotesApp } from "./NotesApp";
-import { SidebarHeader, SidebarToggle } from "./SidebarToggle";
+import { SidebarFooter, SidebarToggle } from "./SidebarToggle";
 import { useSidebarState } from "./useSidebarState";
 import { Modal } from "./Modal";
+import { Dropdown } from "./Dropdown";
 import { localDate } from "./dates";
+
+const NotesWorkspace = lazy(async () => {
+  const module = await import("./NotesApp");
+  return { default: module.NotesApp };
+});
+
+const NutritionWorkspace = lazy(async () => {
+  const module = await import("./NutritionApp");
+  return { default: module.NutritionApp };
+});
 
 export function App() {
   const location = useLocation();
@@ -70,7 +86,22 @@ export function App() {
         </button>
       </div>
     );
-  if (location.pathname.startsWith("/notes")) return <NotesApp />;
+  if (location.pathname.startsWith("/notes"))
+    return (
+      <Suspense
+        fallback={<div className="loading-screen">Cargando notas…</div>}
+      >
+        <NotesWorkspace />
+      </Suspense>
+    );
+  if (location.pathname.startsWith("/nutrition"))
+    return (
+      <Suspense
+        fallback={<div className="loading-screen">Cargando nutrición…</div>}
+      >
+        <NutritionWorkspace />
+      </Suspense>
+    );
   return <Workspace />;
 }
 function Login() {
@@ -197,6 +228,7 @@ function Workspace() {
     description: string;
     path: string;
   } | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const client = useQueryClient();
   const location = useLocation();
   const route = location.pathname;
@@ -213,9 +245,11 @@ function Workspace() {
       ? "inbox"
       : route === "/upcoming"
         ? "upcoming"
-        : route === "/completed"
-          ? "completed"
-          : "today";
+        : route === "/calendar"
+          ? "calendar"
+          : route === "/completed"
+            ? "completed"
+            : "today";
   const params = new URLSearchParams({
     sort: sort || settings?.default_sort || "manual",
     days,
@@ -227,9 +261,25 @@ function Workspace() {
     ? "/search"
     : projectId || labelId
       ? "/tasks"
-      : `/views/${view}`;
+      : view === "calendar"
+        ? "/tasks"
+        : `/views/${view}`;
   const taskQuery = useResource<Task[]>(`${endpoint}?${params.toString()}`);
   const tasks = taskQuery.data ?? [];
+  const [viewOverride, setViewOverride] = useState<"list" | "board" | null>(
+    null,
+  );
+  const completedParams = new URLSearchParams({
+    sort: sort || settings?.default_sort || "manual",
+    status: "completed",
+  });
+  if (projectId) completedParams.set("project_id", projectId);
+  const projectCompletedQuery = useResource<Task[]>(
+    projectId ? `/tasks?${completedParams.toString()}` : "/views/completed",
+  );
+  const projectCompletedTasks = projectId
+    ? (projectCompletedQuery.data ?? [])
+    : [];
   const openedTaskId = useRef<string | null>(null);
   const linkedTaskId = new URLSearchParams(location.search).get("task");
   const linkedTaskQuery = useResource<Task[]>("/tasks");
@@ -254,6 +304,7 @@ function Workspace() {
     setSearch("");
     setSearchOpen(false);
     setSort("");
+    setViewOverride(null);
     if (window.innerWidth <= 800) setNavOpen(false);
   }, [route, setNavOpen]);
   useAppearance(settings);
@@ -307,6 +358,16 @@ function Workspace() {
     }
     void mutate(`/tasks/${task.id}/${actionName}`, "POST", {});
   }
+  const boardView: "list" | "board" =
+    viewOverride ?? selectedProject?.default_view ?? "list";
+  function setBoardView(mode: "list" | "board") {
+    setViewOverride(mode);
+    if (selectedProject && selectedProject.default_view !== mode) {
+      void mutate(`/projects/${selectedProject.id}`, "PATCH", {
+        default_view: mode,
+      });
+    }
+  }
   function reorder(task: Task, direction: number) {
     const siblings = tasks
       .filter(
@@ -344,9 +405,34 @@ function Workspace() {
     });
   }
   function dragEnd(event: DragEndEvent) {
-    const task = tasks.find((candidate) => candidate.id === event.active.id);
+    const allTasks =
+      projectId && projectCompletedTasks.length > 0
+        ? [...tasks, ...projectCompletedTasks]
+        : tasks;
+    const task = allTasks.find((candidate) => candidate.id === event.active.id);
     if (!task || !event.over || event.active.id === event.over.id) return;
+    if (task.status === "completed") return;
     const targetId = String(event.over.id);
+    if (targetId === "date:" || targetId.startsWith("date:")) {
+      // date:YYYY-MM-DD o date:YYYY-MM-DD:HH:MM (franja horaria del time-grid).
+      const rest = targetId.slice(5) || null;
+      const newDate = rest ? rest.slice(0, 10) : null;
+      const newTime = rest && rest.length > 10 ? rest.slice(11, 16) : undefined;
+      if (
+        (task.due_date ?? null) === newDate &&
+        (newTime === undefined || (task.due_time ?? "").slice(0, 5) === newTime)
+      )
+        return;
+      void mutate(`/tasks/${task.id}`, "PATCH", {
+        due_date: newDate,
+        ...(newDate
+          ? newTime !== undefined
+            ? { due_time: newTime }
+            : {}
+          : { due_time: null }),
+      });
+      return;
+    }
     if (targetId.startsWith("project:")) {
       void mutate(`/tasks/${task.id}/move`, "PATCH", {
         project_id: targetId.slice(8) || null,
@@ -359,30 +445,87 @@ function Workspace() {
       void mutate(`/tasks/${task.id}/move`, "PATCH", {
         section_id: targetId.slice(8) || null,
         parent_task_id: null,
-      });
-      return;
-    }
-    const targetTask = tasks.find((candidate) => candidate.id === targetId);
-    if (!targetTask) return;
-    if (
-      targetTask.section_id !== task.section_id ||
-      targetTask.parent_task_id !== task.parent_task_id ||
-      targetTask.project_id !== task.project_id
-    ) {
-      void mutate(`/tasks/${task.id}/move`, "PATCH", {
-        project_id: targetTask.project_id,
-        section_id: targetTask.section_id,
-        parent_task_id: targetTask.parent_task_id,
       }).then((success) => {
         if (success)
           void mutate(`/tasks/${task.id}/reorder`, "PATCH", {
-            before_id: targetId,
+            before_id: null,
           });
       });
       return;
     }
-    void mutate(`/tasks/${task.id}/reorder`, "PATCH", { before_id: targetId });
+    const targetTask = allTasks.find((candidate) => candidate.id === targetId);
+    if (!targetTask) return;
+    if (targetTask.status !== task.status) return;
+    // ¿Se soltó por debajo del centro de la tarjeta objetivo?
+    // Entonces hay que insertar después (o al final si es la última).
+    const initial = event.active.rect.current.initial;
+    const overRect = event.over.rect;
+    const insertAfter =
+      initial !== null &&
+      initial.top + initial.height / 2 + event.delta.y >
+        overRect.top + overRect.height / 2;
+    const moved =
+      targetTask.section_id !== task.section_id ||
+      targetTask.parent_task_id !== task.parent_task_id ||
+      targetTask.project_id !== task.project_id;
+    const reference = moved ? targetTask : task;
+    const siblings = allTasks
+      .filter(
+        (candidate) =>
+          candidate.id !== task.id &&
+          candidate.status === reference.status &&
+          candidate.project_id === reference.project_id &&
+          candidate.section_id === reference.section_id &&
+          candidate.parent_task_id === reference.parent_task_id,
+      )
+      .sort((left, right) => left.position - right.position);
+    const targetIndex = siblings.findIndex(
+      (candidate) => candidate.id === targetId,
+    );
+    if (targetIndex < 0) return;
+    const beforeId = insertAfter
+      ? (siblings[targetIndex + 1]?.id ?? null)
+      : targetId;
+    if (!moved) {
+      // Sin cambio real: ya está justo antes de ese hueco.
+      const whole = allTasks
+        .filter(
+          (candidate) =>
+            candidate.status === task.status &&
+            candidate.project_id === task.project_id &&
+            candidate.section_id === task.section_id &&
+            candidate.parent_task_id === task.parent_task_id,
+        )
+        .sort((left, right) => left.position - right.position);
+      const selfIndex = whole.findIndex(
+        (candidate) => candidate.id === task.id,
+      );
+      if ((whole[selfIndex + 1]?.id ?? null) === beforeId) return;
+      void mutate(`/tasks/${task.id}/reorder`, "PATCH", {
+        before_id: beforeId,
+      });
+      return;
+    }
+    void mutate(`/tasks/${task.id}/move`, "PATCH", {
+      project_id: targetTask.project_id,
+      section_id: targetTask.section_id,
+      parent_task_id: targetTask.parent_task_id,
+    }).then((success) => {
+      if (success)
+        void mutate(`/tasks/${task.id}/reorder`, "PATCH", {
+          before_id: beforeId,
+        });
+    });
   }
+  function dragStart(event: DragStartEvent) {
+    setActiveId(String(event.active.id));
+  }
+  const activeTask =
+    (activeId &&
+      [...tasks, ...projectCompletedTasks].find(
+        (candidate) => candidate.id === activeId,
+      )) ||
+    null;
   if (
     settingsQuery.isError ||
     projectQuery.isError ||
@@ -420,9 +563,11 @@ function Workspace() {
         ? "Bandeja de entrada"
         : view === "upcoming"
           ? "Próximo"
-          : view === "completed"
-            ? "Completadas"
-            : "Hoy"));
+          : view === "calendar"
+            ? "Calendario"
+            : view === "completed"
+              ? "Completadas"
+              : "Hoy"));
   const listProps = {
     projects,
     labels,
@@ -434,7 +579,16 @@ function Workspace() {
     busy,
   };
   return (
-    <DndContext sensors={sensors} onDragEnd={dragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={dragStart}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={(event) => {
+        setActiveId(null);
+        dragEnd(event);
+      }}
+    >
       <div className={`app-shell ${navOpen ? "" : "nav-collapsed"}`}>
         {navOpen && (
           <button
@@ -444,7 +598,6 @@ function Workspace() {
           />
         )}
         <aside className={`sidebar ${navOpen ? "open" : ""}`}>
-          <SidebarHeader open={navOpen} onToggle={() => setNavOpen(!navOpen)} />
           <button className="quick-add" onClick={() => setDraft({ projectId })}>
             <Plus size={19} />
             Añadir tarea<kbd>Q</kbd>
@@ -471,6 +624,10 @@ function Workspace() {
             <NavLink to="/upcoming">
               <CalendarDays size={18} />
               Próximo
+            </NavLink>
+            <NavLink to="/calendar">
+              <Calendar size={18} />
+              Calendario
             </NavLink>
             <NavLink to="/completed">
               <CheckCheck size={18} />
@@ -549,6 +706,10 @@ function Workspace() {
                 Cerrar sesión
               </button>
             </nav>
+            <SidebarFooter
+              open={navOpen}
+              onToggle={() => setNavOpen(!navOpen)}
+            />
           </div>
         </aside>
         <div className="main-shell">
@@ -568,7 +729,13 @@ function Workspace() {
               <Menu size={20} />
             </button>
           </div>
-          <main className="main-content">
+          <main
+            className={
+              view === "calendar"
+                ? "main-content calendar-full"
+                : "main-content"
+            }
+          >
             {error && (
               <div className="error banner" role="alert">
                 {error}
@@ -675,6 +842,41 @@ function Workspace() {
                   />
                 )}
               </>
+            ) : route === "/calendar" ? (
+              <>
+                {taskQuery.isPending ? (
+                  <p className="muted loading">Cargando tareas…</p>
+                ) : taskQuery.isError ? (
+                  <p role="alert" className="error">
+                    No se pudieron cargar las tareas.{" "}
+                    <button
+                      onClick={() => {
+                        void taskQuery.refetch();
+                      }}
+                    >
+                      Reintentar
+                    </button>
+                  </p>
+                ) : (
+                  <CalendarView
+                    tasks={tasks}
+                    settings={settings}
+                    labels={labels}
+                    projects={projects}
+                    today={today}
+                    busy={busy}
+                    edit={(task: Task) => setDraft({ task })}
+                    action={action}
+                    addTask={(dueDate, dueTime) =>
+                      setDraft({
+                        projectId,
+                        dueDate: dueDate ?? today,
+                        dueTime: dueTime ?? null,
+                      })
+                    }
+                  />
+                )}
+              </>
             ) : (
               <>
                 <div className="eyebrow">
@@ -697,14 +899,6 @@ function Workspace() {
                           </span>
                         )}
                     </h1>
-                    <p className="page-subtitle">
-                      {selectedProject?.description ||
-                        (view === "today"
-                          ? "Pon el foco en lo que importa. Lo demás puede esperar."
-                          : view === "completed"
-                            ? "Cada pequeño paso cuenta. Mira todo lo que has avanzado."
-                            : "Tus próximos pasos, con espacio para lo que venga.")}
-                    </p>
                   </div>
                   <button
                     className="primary add-main"
@@ -764,12 +958,33 @@ function Workspace() {
                 )}
                 <div className="list-toolbar">
                   <div className="list-title">
-                    <span className="list-icon">☷</span>Mis tareas
+                    <span className="list-icon">☷</span>
+                    Mis tareas
                     <span className="count-badge">{tasks.length}</span>
                   </div>
                   <div>
                     {selectedProject && (
                       <>
+                        <div
+                          className="view-toggle"
+                          role="group"
+                          aria-label="Cambiar vista del proyecto"
+                        >
+                          <button
+                            className={boardView === "list" ? "active" : ""}
+                            aria-pressed={boardView === "list"}
+                            onClick={() => setBoardView("list")}
+                          >
+                            Lista
+                          </button>
+                          <button
+                            className={boardView === "board" ? "active" : ""}
+                            aria-pressed={boardView === "board"}
+                            onClick={() => setBoardView("board")}
+                          >
+                            Tablero
+                          </button>
+                        </div>
                         <button
                           className="text-button"
                           onClick={() =>
@@ -797,27 +1012,31 @@ function Workspace() {
                       </>
                     )}
                     {view === "upcoming" && !projectId && (
-                      <select
-                        aria-label="Días próximos"
+                      <Dropdown
+                        ariaLabel="Días próximos"
+                        variant="inline"
                         value={days}
-                        onChange={(event) => setDays(event.target.value)}
-                      >
-                        <option value="7">7 días</option>
-                        <option value="14">14 días</option>
-                        <option value="30">30 días</option>
-                      </select>
+                        onChange={setDays}
+                        options={[
+                          { value: "7", label: "7 días" },
+                          { value: "14", label: "14 días" },
+                          { value: "30", label: "30 días" },
+                        ]}
+                      />
                     )}
-                    <select
-                      aria-label="Ordenar tareas"
+                    <Dropdown
+                      ariaLabel="Ordenar tareas"
+                      variant="inline"
                       value={sort || settings.default_sort}
-                      onChange={(event) => setSort(event.target.value)}
-                    >
-                      <option value="manual">Orden manual</option>
-                      <option value="date">Fecha</option>
-                      <option value="priority">Prioridad</option>
-                      <option value="created">Creación</option>
-                      <option value="name">Nombre</option>
-                    </select>
+                      onChange={setSort}
+                      options={[
+                        { value: "manual", label: "Orden manual" },
+                        { value: "date", label: "Fecha" },
+                        { value: "priority", label: "Prioridad" },
+                        { value: "created", label: "Creación" },
+                        { value: "name", label: "Nombre" },
+                      ]}
+                    />
                   </div>
                 </div>
                 {taskQuery.isPending ? (
@@ -834,87 +1053,89 @@ function Workspace() {
                     </button>
                   </p>
                 ) : selectedProject ? (
-                  <>
-                    <DropArea id="section:">
-                      <h3 className="section-title">Sin sección</h3>
-                      <TaskList
-                        {...listProps}
-                        tasks={tasks.filter((task) => !task.section_id)}
-                      />
-                      <button
-                        className="inline-add"
-                        onClick={() => setDraft({ projectId })}
-                      >
-                        <Plus size={16} />
-                        Añadir tarea
-                      </button>
-                    </DropArea>
-                    {sections
-                      .filter((section) => section.project_id === projectId)
-                      .map((section) => (
-                        <DropArea id={`section:${section.id}`} key={section.id}>
-                          <div className="section-heading">
-                            <h3 className="section-title">{section.name}</h3>
-                            <div>
-                              <button
-                                aria-label={`Subir sección ${section.name}`}
-                                onClick={() =>
-                                  reorderCollection("sections", section, -1)
-                                }
-                              >
-                                ↑
-                              </button>
-                              <button
-                                aria-label={`Bajar sección ${section.name}`}
-                                onClick={() =>
-                                  reorderCollection("sections", section, 1)
-                                }
-                              >
-                                ↓
-                              </button>
-                              <button
-                                className="text-button"
-                                onClick={() =>
-                                  setEntity({
-                                    kind: "sections",
-                                    value: section,
-                                    projectId: section.project_id,
-                                  })
-                                }
-                              >
-                                Editar
-                              </button>
-                              <button
-                                className="text-button danger"
-                                onClick={() =>
-                                  setConfirmation({
-                                    title: "Eliminar sección",
-                                    description:
-                                      "Las tareas se conservarán sin sección dentro del proyecto.",
-                                    path: `/sections/${section.id}`,
-                                  })
-                                }
-                              >
-                                Eliminar
-                              </button>
-                            </div>
-                          </div>
-                          <TaskList
-                            {...listProps}
-                            tasks={tasks.filter(
-                              (task) => task.section_id === section.id,
-                            )}
-                          />
-                          {tasks.every(
-                            (task) => task.section_id !== section.id,
-                          ) && (
-                            <p className="section-empty">
-                              Arrastra tareas aquí para organizarlas.
-                            </p>
-                          )}
-                        </DropArea>
-                      ))}
-                  </>
+                  boardView === "board" ? (
+                    <KanbanBoard
+                      tasks={tasks}
+                      completedTasks={projectCompletedTasks}
+                      sections={sections.filter(
+                        (section) => section.project_id === projectId,
+                      )}
+                      projects={projects}
+                      labels={labels}
+                      settings={settings}
+                      projectId={selectedProject.id}
+                      edit={(task: Task) => setDraft({ task })}
+                      addChild={(task: Task) => setDraft({ parent: task })}
+                      action={action}
+                      reorder={reorder}
+                      busy={busy}
+                      addTask={(sectionId) =>
+                        setDraft({ projectId, sectionId })
+                      }
+                      addSection={() =>
+                        setEntity({
+                          kind: "sections",
+                          projectId: selectedProject.id,
+                        })
+                      }
+                      editSection={(section) =>
+                        setEntity({
+                          kind: "sections",
+                          value: section,
+                          projectId: section.project_id,
+                        })
+                      }
+                      deleteSection={(section) =>
+                        setConfirmation({
+                          title: "Eliminar sección",
+                          description:
+                            "Las tareas se conservarán sin sección dentro del proyecto.",
+                          path: `/sections/${section.id}`,
+                        })
+                      }
+                    />
+                  ) : (
+                    <ProjectGroupedList
+                      tasks={tasks}
+                      completedTasks={projectCompletedTasks}
+                      sections={sections.filter(
+                        (section) => section.project_id === projectId,
+                      )}
+                      projects={projects}
+                      labels={labels}
+                      settings={settings}
+                      projectId={selectedProject.id}
+                      edit={(task: Task) => setDraft({ task })}
+                      addChild={(task: Task) => setDraft({ parent: task })}
+                      action={action}
+                      reorder={reorder}
+                      busy={busy}
+                      addTask={(sectionId) =>
+                        setDraft({ projectId, sectionId })
+                      }
+                      addSection={() =>
+                        setEntity({
+                          kind: "sections",
+                          projectId: selectedProject.id,
+                        })
+                      }
+                      editSection={(section) =>
+                        setEntity({
+                          kind: "sections",
+                          value: section,
+                          projectId: section.project_id,
+                        })
+                      }
+                      deleteSection={(section) =>
+                        setConfirmation({
+                          title: "Eliminar sección",
+                          description:
+                            "Las tareas se conservarán sin sección dentro del proyecto.",
+                          path: `/sections/${section.id}`,
+                        })
+                      }
+                    />
+                  )
                 ) : tasks.length === 0 ? (
                   <Empty
                     title={
@@ -1027,6 +1248,30 @@ function Workspace() {
             </div>
           </Modal>
         )}
+        <DragOverlay dropAnimation={null}>
+          {activeTask ? (
+            <div className="drag-preview">
+              <GripVertical size={15} />
+              <span className="drag-preview-title">{activeTask.title}</span>
+              {activeTask.label_ids.map((id) => {
+                const label = labels.find((candidate) => candidate.id === id);
+                return label ? (
+                  <span
+                    key={id}
+                    className="label-pill"
+                    style={{
+                      backgroundColor: `${label.color}2e`,
+                      color: label.color,
+                      border: `1px solid ${label.color}66`,
+                    }}
+                  >
+                    {label.name}
+                  </span>
+                ) : null;
+              })}
+            </div>
+          ) : null}
+        </DragOverlay>
       </div>
     </DndContext>
   );
@@ -1054,9 +1299,7 @@ function ProjectTree({
           <div className="project-branch" key={project.id}>
             <DropArea id={`project:${project.id}`}>
               <NavLink to={`/project/${project.id}`}>
-                <span className="project-hash accent-marker">
-                  #
-                </span>
+                <span className="project-hash accent-marker">#</span>
                 {project.name}
               </NavLink>
             </DropArea>

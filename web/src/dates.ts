@@ -31,6 +31,28 @@ export function formatDate(date: string, format = "DD/MM/YYYY"): string {
   return date.split("-").reverse().join("/");
 }
 
+/** Moves an ISO calendar date by whole days without timezone drift. */
+export function shiftDate(date: string, days: number): string {
+  const parts = date.split("-").map(Number);
+  const year = parts[0] ?? 0;
+  const month = parts[1] ?? 1;
+  const day = parts[2] ?? 1;
+  const value = new Date(Date.UTC(year, month - 1, day + days));
+  return value.toISOString().slice(0, 10);
+}
+
+/** Returns the ISO Monday of the week containing the given date. */
+export function mondayOf(date: string): string {
+  const parts = date.split("-").map(Number);
+  const year = parts[0] ?? 0;
+  const month = parts[1] ?? 1;
+  const day = parts[2] ?? 1;
+  const value = new Date(Date.UTC(year, month - 1, day));
+  const offset = (value.getUTCDay() + 6) % 7;
+  value.setUTCDate(value.getUTCDate() - offset);
+  return value.toISOString().slice(0, 10);
+}
+
 /** Formats a local clock without converting it through the browser timezone. */
 export function formatTime(time: string, hourFormat: "12" | "24"): string {
   if (hourFormat === "24") return time.slice(0, 5);

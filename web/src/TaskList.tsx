@@ -75,19 +75,17 @@ function TaskRow(props: ListProps & { task: Task }) {
     >
       <div
         className={`task-row ${task.status === "completed" ? "completed" : ""}`}
+        {...sortable.attributes}
+        {...sortable.listeners}
       >
-        <button
-          className="drag-handle"
-          {...sortable.attributes}
-          {...sortable.listeners}
-          aria-label={`Arrastrar ${task.title}`}
-        >
+        <span className="drag-handle" aria-hidden="true">
           <GripVertical size={16} />
-        </button>
+        </span>
         <button
           className={`complete-button priority-${task.priority}`}
           aria-label={`${task.status === "completed" ? "Restaurar" : "Completar"} ${task.title}`}
           disabled={props.busy}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() =>
             props.action(
               task,
@@ -97,7 +95,12 @@ function TaskRow(props: ListProps & { task: Task }) {
         >
           {task.status === "completed" && <Check size={13} />}
         </button>
-        <button className="task-content" onClick={() => props.edit(task)}>
+        <button
+          className="task-content"
+          onClick={() => {
+            if (!sortable.isDragging) props.edit(task);
+          }}
+        >
           <span className="task-title">{task.title}</span>
           <span className="task-meta">
             {task.due_date && (
@@ -146,6 +149,7 @@ function TaskRow(props: ListProps & { task: Task }) {
           className="icon-button task-options"
           aria-label={`Acciones de ${task.title}`}
           aria-expanded={actions}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setActions(!actions)}
         >
           ···

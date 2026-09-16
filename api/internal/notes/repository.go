@@ -16,6 +16,18 @@ func List(requestContext context.Context, database core.Database, deleted bool) 
 	return core.List[Note](requestContext, database, "SELECT to_jsonb(item) FROM notes item WHERE (deleted_at IS NOT NULL)=$1 ORDER BY updated_at DESC,id", deleted)
 }
 
+// Search uses the GIN full-text index and returns at most 100 active documents.
+// Queries support words, quoted phrases, OR and minus-prefixed exclusions.
+func Search(requestContext context.Context, database core.Database, query string) ([]Note, error) {
+	if len(query) > 500 {
+		return nil, core.Invalid("Search is limited to 500 bytes")
+	}
+	if strings.TrimSpace(query) == "" {
+		return core.List[Note](requestContext, database, "SELECT to_jsonb(note)-'search_vector' FROM notes note WHERE deleted_at IS NULL ORDER BY updated_at DESC,id LIMIT 100")
+	}
+	return core.List[Note](requestContext, database, `SELECT to_jsonb(note)-'search_vector' FROM notes note,websearch_to_tsquery('simple',$1) query WHERE deleted_at IS NULL AND search_vector @@ query ORDER BY ts_rank(search_vector,query) DESC,updated_at DESC,id LIMIT 100`, query)
+}
+
 func writeNote(requestContext context.Context, database core.Database, identifier string, input Input) (Note, error) {
 	if identifier == "" {
 		return core.One[Note](requestContext, database, `INSERT INTO notes(title,kind,content,properties,nodes,edges,filter,sort,folder_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING to_jsonb(notes)`, input.Title, input.Kind, input.Content, input.Properties, input.Nodes, input.Edges, input.Filter, input.Sort, input.FolderID)
@@ -34,7 +46,7 @@ func ListLinks(requestContext context.Context, database core.Database, identifie
 }
 
 func indexLinks(requestContext context.Context, database core.Database, note Note) error {
-	previous, failure := ListLinks(requestContext, database, note.ID, false)
+	previous, failure := core.List[Link](requestContext, database, "SELECT to_jsonb(link) FROM note_links link WHERE source_note_id=$1", note.ID)
 	if failure != nil {
 		return failure
 	}

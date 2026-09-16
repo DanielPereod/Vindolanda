@@ -20,7 +20,7 @@ Passwords require 12–72 bytes and are hashed with bcrypt cost 12. Tokens conta
 
 Each collection supports `GET /collection`, `POST /collection`, `PATCH /collection/{id}` and `DELETE /collection/{id}`. Create returns 201, update 200 and delete 204. PATCH preserves omitted fields; null clears nullable references.
 
-- Project: `name`, `description`, `color` (six-digit hex), `icon`, `parent_project_id`, `favorite`, `archived`, `default_view` (`list`). Server fields: `id`, `position`, `created_at`, `updated_at`.
+- Project: `name`, `description`, `color` (six-digit hex), `icon`, `parent_project_id`, `favorite`, `archived`, `default_view` (`list` | `board`). Server fields: `id`, `position`, `created_at`, `updated_at`.
 - Section: `name`, `project_id`. Server fields: `id`, `position`, `created_at`, `updated_at`. A section cannot switch projects: move its tasks instead.
 - Label: `name` (globally unique), `color`, `favorite`. Server fields: `id`, `created_at`.
 - `PATCH /projects/{id}/reorder` and `PATCH /sections/{id}/reorder` accept `{before_id: string | null}`. A target must be a different sibling. Null appends.
@@ -101,12 +101,112 @@ Handlers decode input, services validate invariants and repositories execute par
 
 All endpoints require the existing session and trusted-origin mutation policy.
 
-- `GET /api/v1/notes`: list documents with timestamps.
+- `GET /api/v1/notes`: list active documents with timestamps. `?deleted=true` lists trash.
+- `GET /api/v1/notes/{id}`: fetch an active document by ID.
+- `GET /api/v1/notes/search?q=...`: full-text search of active titles, content and property text, capped at 100 results. Supports words, quoted phrases, `OR` and `-exclusion`. Empty queries return recent documents; queries over 500 bytes are rejected.
 - `POST /api/v1/notes`: create a document (201).
 - `PUT /api/v1/notes/{id}`: replace editable document fields (200, or 404).
+- `DELETE /api/v1/notes/{id}`: soft delete (204).
+- `POST /api/v1/notes/{id}/restore`: restore the same identity (204).
+- `DELETE /api/v1/notes/{id}/permanent`: permanently delete a trashed document, removing its Canvas references transactionally (204). Active documents are rejected.
+- `DELETE /api/v1/notes/trash`: permanently empty trash (204).
+- `GET /api/v1/notes/{id}/links` and `/backlinks`: indexed occurrences including stable target IDs, source/current titles, deleted-target state and context. Positions are UTF-8 byte offsets.
+- `GET /api/v1/note-folders`: list virtual folders.
+- `POST /api/v1/note-folders`, `PUT /api/v1/note-folders/{id}`: create/update `{name,parent_id}`; cycles and duplicate sibling names are rejected.
+- `DELETE /api/v1/note-folders/{id}`: delete an empty folder. Child folders and notes, including trashed notes, prevent deletion.
 
-Editable fields: `title` (unique after case folding and trimming), `kind` (`note`, `base`, `canvas`), `content` (Markdown), `properties` (string-to-string object), `nodes` (`{id,note_id,x,y}`), `edges` (`{from,to}`), `filter` and `sort` (`title`, `updated_at`, or empty). Canvas node references must point to existing notes. Node identifiers must be unique within a canvas; edges must connect distinct existing nodes. Coordinates are bounded to 0–10000 pixels; limits are 500 nodes, 1000 edges and 100 properties. Requests retain the shared 1 MiB limit.
+Editable fields: `title` (unique after case folding and trimming), `kind` (`note`, `base`, `canvas`), `content` (Markdown), `properties` (string-to-string object), `nodes`, `edges` (`{from,to}`), `filter` and `sort` (`title`, `updated_at`, or empty). A canvas node is `{id,type,x,y,width?,height?,color?}` where `type` is `note` (uses `note_id` and must reference an active note), `text` (uses canvas-only `text`, up to 20 KB) or `media` (uses an http(s) `url` or a same-origin `/api/v1/attachments/…` path). Nodes without `type` are treated as `note` for backward compatibility. Node identifiers must be unique within a canvas; edges must connect distinct existing nodes. Coordinates are bounded to ±100000 pixels, card sizes to 40–5000 pixels when present, and colors to six-digit hex. Limits are 500 nodes, 1000 edges and 100 properties. Requests retain the shared 1 MiB limit; attachment uploads use their own multipart limit.
 
 Task create/update accepts optional `note_ids`. Responses return an array, including when empty. Omitted fields on PATCH preserve links. Explicit `[]` removes links. Invalid references roll back the entire task mutation; duplicate tasks retain note links. The foreign-key join table prevents orphaned task links.
 
-This version uses explicit last-write-wins saves. Wikilinks and backlinks resolve from Markdown in the client; they are distinct from task associations. Bases reference the current notes collection rather than duplicating rows.
+Notes accept an optional nullable `folder_id`. Titles are unique among active documents; restoring a conflicting title returns 409 and preserves the trash entry. Saves are debounced in the browser, serialized and last-write-wins across clients. The service atomically writes content and derived links; unchanged content is not reparsed. Wiki links bind by case-insensitive title on first resolution, then preserve their target ID on subsequent source edits and target renames. Alias labels are presentation only; a normalized note-alias registry is not yet available. Link indexes and task associations are separate. Bases reference the current notes collection rather than duplicating rows.
+
+## Attachments
+
+All endpoints require the existing session and trusted-origin mutation policy.
+
+- `GET /api/v1/attachments`: list active attachments with metadata only, newest first. `?deleted=true` lists the trash.
+- `POST /api/v1/attachments`: multipart form with a `file` field. Accepts one image up to 15 MiB whose bytes sniff as, or whose declared type matches, `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/bmp` or `image/avif`. Returns 201 with `{id,filename,content_type,size,url,created_at}` where `url` is `/api/v1/attachments/{id}/{id}.{ext}`.
+- `PUT /api/v1/attachments/{id}`: rename an active attachment with `{filename}` (200). The URL and bytes are unchanged, so embeds keep working.
+- `DELETE /api/v1/attachments/{id}`: move an active attachment to the trash (204).
+- `POST /api/v1/attachments/{id}/restore`: restore a trashed attachment (204).
+- `DELETE /api/v1/attachments/{id}/permanent`: delete a trashed attachment and its bytes (204). Active attachments are rejected.
+- `DELETE /api/v1/attachments/trash`: empty the trash (204).
+- `GET /api/v1/attachments/{id}/{name}`: return the stored bytes with the stored content type, an `inline` disposition and a private immutable cache header. Trashed attachments return 404.
+
+Bytes are stored in PostgreSQL; no filesystem or external service is involved. Notes embed the URL as `![alt](url)` from a clipboard paste or the device picker. Canvases store it as a `media` node from a paste, a dropped file or **Media → Subir imagen**. The **Adjuntos** page lists every attachment with rename and a trash with restore and permanent deletion; it shows how many notes or cards embed each image. Empty files, non-image files and oversized files return 422 or 413. Attachments are not referenced by foreign keys, so permanently deleting one leaves broken embeds in notes that still point to it.
+
+## Nutrition
+
+All endpoints require the existing session and trusted-origin mutation policy. The module is a single-user domain registered under `/api/v1/nutrition`, alongside the existing task, project and notes modules.
+
+- `GET /api/v1/nutrition/profile`: return the singleton nutrition profile.
+- `PUT /api/v1/nutrition/profile`: overlay supplied fields on the profile, validate and upsert it (200).
+
+Profile fields: `weight_kg`, `height_cm`, `age`, `sex` (`male` | `female` | `other`), `activity_level` (`sedentary` | `light` | `moderate` | `active` | `very_active`), `goal` (`lose` | `maintain` | `gain`), `target_calories`, `target_protein_g`, `target_carbs_g`, `target_fat_g`, `target_fiber_g`, `target_water_ml` and `target_mode` (`auto` | `manual`). The response adds `updated_at`. Weight, height, age and targets are bounded; invalid enums, negative values or out-of-range numbers return 422. A single profile row is created by the migration, so the first `GET` already returns defaults.
+
+When `target_mode` is `auto`, the service derives the targets with Mifflin-St Jeor, the activity factor and a goal adjustment (lose −15%, gain +10%), then distributes macros by goal and computes fiber (14 g per 1000 kcal) and water (35 ml per kg). While the identity data (weight, height, age) is incomplete the stored targets are preserved unchanged. In `manual` mode the supplied targets are stored as given. The browser mirrors the same formula for a live preview.
+
+### Food catalog
+
+- `GET /api/v1/nutrition/foods`: list local foods. Query: `q` (name, brand or barcode substring), `favorite=true`, `limit` (1–200, default 50) and `offset`.
+- `POST /api/v1/nutrition/foods`: create a manual food (201).
+- `GET /api/v1/nutrition/foods/{id}`: fetch one food.
+- `PATCH /api/v1/nutrition/foods/{id}`: overlay supplied fields on a food (200).
+- `DELETE /api/v1/nutrition/foods/{id}`: delete a food (204).
+
+Food fields: `name` (1–200 bytes), `brand`, `barcode` (nullable, 4–32 digits), `base_quantity` (> 0) and `base_unit` (`g` | `ml` | `unit`), then `calories_kcal`, `protein_g`, `carbs_g`, `fat_g`, `fiber_g`, `sugar_g`, `saturated_fat_g`, `salt_g`, `sodium_mg` and a `micronutrients` object of non-negative numbers. Responses add `id`, `source` (`manual` | `openfoodfacts`), `created_at` and `updated_at`. Name, brand and unit are unique after case folding and trimming, and barcodes are unique when present; duplicates return 409. The list is ordered by favorites first, then name.
+
+### Open Food Facts
+
+The server proxies Open Food Facts so the browser does not call the upstream directly, and a descriptive `OPENFOODFACTS_USER_AGENT` identifies the installation. The test suite never calls the upstream; the client is injected.
+
+- `GET /api/v1/nutrition/foods/lookup?barcode=...`: normalized product candidate, not saved. 404 when unknown, 502 when upstream fails.
+- `GET /api/v1/nutrition/foods/openfoodfacts?q=...`: normalized search results (up to 20), dropping entries without a barcode or name.
+- `POST /api/v1/nutrition/foods/import`: body `{barcode}` fetches and stores the product with `source=openfoodfacts` (201); a duplicate barcode returns 409.
+
+Values are normalized to a 100 g/100 ml base, and sodium and mineral amounts reported by Open Food Facts in grams are converted to milligrams. Import returns 422 when the upstream data cannot satisfy catalog invariants. The imported data is available under the ODbL license.
+
+### Diary
+
+- `GET /api/v1/nutrition/diary?date=YYYY-MM-DD`: entries, day totals, the profile targets and stored water.
+- `POST /api/v1/nutrition/diary`: log a food `{entry_date,meal,food_id,quantity,unit?}` (201). The response freezes the scaled nutrition so later catalog edits do not rewrite history.
+- `PATCH /api/v1/nutrition/diary/{id}`: change `quantity`, `meal` and/or `entry_date` (200); the snapshot is rescaled proportionally.
+- `DELETE /api/v1/nutrition/diary/{id}`: remove an entry (204).
+- `PUT /api/v1/nutrition/diary/water`: body `{entry_date,water_ml}` upserts the day's water (200).
+
+Meals are `breakfast`, `lunch`, `dinner` or `snack`. `quantity` must be positive and the optional `unit` must match the food's base unit, otherwise the request returns 422. Deleting a catalog food preserves its logged entries with a null `food_id`.
+
+### Recipes
+
+- `GET /api/v1/nutrition/recipes?q=...`: list recipes ordered favorites first, then name. Each recipe includes its ingredients, whole-recipe `totals` and `per_serving` nutrition computed from the catalog foods.
+- `POST /api/v1/nutrition/recipes`: create with `{name,description,prep_minutes,servings,tags,favorite,ingredients:[{food_id,quantity,unit?,note?}]}` (201).
+- `GET /api/v1/nutrition/recipes/{id}` and `PATCH /api/v1/nutrition/recipes/{id}`: fetch or update a recipe; ingredients are replaced as a whole.
+- `DELETE /api/v1/nutrition/recipes/{id}`: delete the recipe and its ingredients (204).
+- `POST /api/v1/nutrition/recipes/{id}/cook`: body `{entry_date,meal,servings}` logs the scaled nutrition to the diary (201) under the recipe name; servings default to one.
+
+Ingredient quantities are scaled by the food base portion and an optional unit must match the food base unit; an unknown food or an out-of-range quantity returns 422. A food used by a recipe cannot be deleted. Deleting a recipe never touches the diary.
+
+### Weekly plan
+
+- `GET /api/v1/nutrition/plans?week=YYYY-MM-DD`: the plan for that ISO week (normalized to its Monday), or `null` when none exists. `?template=true` lists reusable templates instead.
+- `POST /api/v1/nutrition/plans`: create `{name,week_start,is_template}` (201). A concrete plan requires a week and a template must not have one; a second plan for the same week returns 409.
+- `GET|PATCH|DELETE /api/v1/nutrition/plans/{id}`: fetch, rename or delete a plan.
+- `POST /api/v1/nutrition/plans/{id}/items`: add `{day_index,meal,recipe_id|food_id,quantity}` (201). `day_index` is 0–6 (Monday based) and exactly one source is required.
+- `PATCH|DELETE /api/v1/nutrition/plans/{id}/items/{itemID}`: change the day, meal or quantity, or remove the item.
+- `POST /api/v1/nutrition/plans/{id}/copy`: `{week_start}` copies the items into that week, creating it when needed; `{is_template:true,name}` saves the items as a reusable template.
+- `POST /api/v1/nutrition/plans/{id}/log`: `{day_index,date,meal}` passes the planned meals to the diary (200, `{logged,entry_date}`). A template needs an explicit date and a concrete week derives it from `week_start`. Logging replaces the diary entries previously created from those plan items, so repeating it is idempotent.
+
+Item nutrition is computed from the referenced recipe per-serving values or the food base portion. Editing, deleting or replacing a planned item drops the diary entries previously derived from it, so re-logging a day never leaves stale totals. Editing a plan does not otherwise change already-logged diary entries until the day is logged again.
+
+### Shopping list
+
+- `GET /api/v1/nutrition/shopping`: pending lines first, then checked, ordered by label.
+- `POST /api/v1/nutrition/shopping/items`: add a manual line `{label,quantity,unit,checked}` (201).
+- `PATCH|DELETE /api/v1/nutrition/shopping/{id}`: update or remove a line.
+- `DELETE /api/v1/nutrition/shopping/checked`: clear every checked line (204).
+- `POST /api/v1/nutrition/shopping/generate`: body `{plan_id}` or `{recipe_ids}` aggregates the ingredients of the planned or chosen recipes, summing lines that share a food and unit. It replaces the previously generated lines and keeps manual ones; returns the resulting list (200).
+
+The list is a derived convenience, not a source of truth. "Create a task with the pending items" is done by the client through the existing tasks API, keeping the nutrition domain free of task dependencies.
+
+Phase 2 adds body progress (weight and measurements).

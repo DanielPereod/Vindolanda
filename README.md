@@ -114,6 +114,7 @@ api/internal/projects/  project hierarchy
 api/internal/sections/  project sections
 api/internal/labels/    global labels
 api/internal/tasks/     tasks, views, ordering and completion history
+api/internal/nutrition/ profile, food catalog, diary, recipes and meal plans
 api/internal/core/      shared HTTP and transaction primitives
 api/internal/server/    composition and integration tests
 api/migrations/         embedded Goose migrations
@@ -132,16 +133,39 @@ Use the application switcher in the top-right corner to move between Tasks and N
 
 - **Notes:** continuous Markdown editing, reading mode (`Ctrl/Cmd+E`), session tabs, a heading outline, word counts, named text properties, `[[Title]]` / `[[Title|Alias]]` links and incoming links. Click an unresolved wiki link to create its note.
 - **Bases:** saved, filtered and sorted tables over note properties. Open a row to edit the underlying note.
-- **Canvas:** add note cards, drag their headers (or use arrow keys), connect cards and remove cards/connections. Positions and edges persist with the canvas.
+- **Canvas:** add note cards, drag their headers (or use arrow keys), connect cards and remove cards/connections. Note and text cards edit Markdown in place with live preview, and note edits autosave to the referenced note. Positions and edges persist with the canvas.
+- **Attachments:** paste an image from the clipboard (`Ctrl/Cmd+V`) or use the image button in a note to insert a Markdown embed. On a canvas, paste an image, drop a file or use **Media → Subir imagen** to create image cards. Images are stored by the API and served from the same origin. The **Adjuntos** page lists every stored image with its usage count, rename and a trash with restore, permanent delete and empty.
 - **Task links:** select notes in the task editor. Notes display linked pending tasks and can open their task details.
 
-Changes autosave after a 650 ms pause; **Guardar** also saves immediately or retries a failed write. Writes are serialized, and responses preserve edits made while saving. Failed saves retain the current draft; leaving through in-app links prompts before discarding unsaved edits. Tabs currently last for the mounted session. Wiki links resolve by case-insensitive title, so update references when renaming a target. Properties are text values; this initial version does not include live preview, virtual folders, indexed global search, typed formulas or the full knowledge-system specification. Canvas navigation uses scrolling rather than zooming. See [the redesign plan](docs/knowledge-redesign.md) for the remaining work.
+Changes autosave after a 650 ms pause; **Guardar** also saves immediately or retries a failed write. Writes are serialized, and responses preserve edits made while saving. Failed saves retain the current draft; leaving through in-app links prompts before discarding unsaved edits. Tabs currently last for the mounted session. Wiki links bind to stable IDs and survive renames. Backlinks and outgoing links are read from the database index. Virtual folders support nested organization and note movement; the trash supports restore, permanent deletion and emptying with confirmation. A conflicting active title prevents restoration until that title is freed.
 
-Migration `00002_notes.sql` creates the notes and task-note tables. Apply migrations before running the updated API. Existing task and account records are preserved. No production rollout is performed by the implementation.
+Use **Ctrl/Cmd+O** for the fuzzy note switcher, **Ctrl/Cmd+P** for commands and **Ctrl/Cmd+Shift+F** for indexed global search. Search supports words, quoted phrases, OR and exclusions and returns up to 100 matches. Properties remain text values. Normalized tags/aliases, typed formulas and large-collection pagination are still pending. Canvas navigation uses scrolling rather than zooming. See [the redesign plan](docs/knowledge-redesign.md) for the remaining work.
+
+Migration `00002_notes.sql` creates the notes and task-note tables. Migrations `00004_knowledge_core.sql`, `00006_note_search.sql` and `00007_active_note_titles.sql` add folders, trash, indexed links and full-text search. Migration `00011_attachments.sql` adds stored image attachments. The migration command backfills existing wiki links in resumable batches. Apply migrations before running the updated API. Existing task and account records are preserved. No production rollout is performed by the implementation.
 
 Run isolated browser checks without application credentials:
 
 ```bash
 cd web
 npx playwright test --config e2e/notes.config.ts
+```
+
+## Nutrition workspace
+
+Use the application switcher to move between Tasks, Notes and Nutrition.
+
+- **Perfil y objetivos:** weight, height, age, sex, activity and goal. Targets are derived with Mifflin-St Jeor or set manually; the browser mirrors the same formula for a live preview.
+- **Diario:** a day per date with four meals, calories remaining, macro and fiber bars, water and a food picker. Entries freeze the nutrition at logging time, so later catalog edits do not rewrite history.
+- **Alimentos:** a local catalog with brands, barcodes, a base portion, macros, a practical micronutrient set and favorites. Products can be searched and imported from Open Food Facts by name or barcode (ODbL).
+- **Recetas:** ingredients from the catalog with macros computed automatically, per-serving values, Markdown steps, tags and **Cocinar** to add several servings to the diary.
+- **Plan semanal:** a Monday-based week with meals per day, reusable templates, copy week, save week as template and **Pasar el día al diario** (idempotent per planned item).
+- **Lista de la compra:** generated from the week plan or a recipe by summing ingredients, editable, with check-off and **Crear tarea con lo pendiente** through the tasks API.
+
+Migrations `00009_nutrition.sql` through `00015_shopping.sql` add the profile, foods, diary, recipes, meal plans and shopping list. Phase 2 adds body progress (weight and measurements). See [the nutrition plan](docs/nutrition-plan.md).
+
+Run the isolated nutrition browser checks without application credentials:
+
+```bash
+cd web
+npx playwright test --config e2e/nutrition.config.ts
 ```

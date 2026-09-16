@@ -92,7 +92,8 @@ test("recognition is reversible and manual choices override detected values", as
       exact: true,
     })
     .click();
-  await page.getByLabel("Prioridad", { exact: true }).selectOption("3");
+  await page.getByRole("button", { name: "Prioridad", exact: true }).click();
+  await page.getByRole("option", { name: "P3 · Media", exact: true }).click();
   await page.getByLabel("Fecha", { exact: true }).fill("2026-12-25");
   const request = page.waitForRequest((request) => request.method() === "POST");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
