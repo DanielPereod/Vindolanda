@@ -1,0 +1,1147 @@
+import { useAppearance } from "./useAppearance";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import {
+  ArrowUpRight,
+  CalendarDays,
+  Check,
+  CheckCheck,
+  ChevronRight,
+  CircleHelp,
+  Folder,
+  Inbox,
+  Leaf,
+  LogOut,
+  Menu,
+  Plus,
+  Search,
+  Settings as SettingsIcon,
+  SlidersHorizontal,
+  Sun,
+  Tag,
+  X,
+} from "lucide-react";
+import { api, ApiError, errorMessage, useResource } from "./api";
+import type { Label, Project, Section, Settings, Task, User } from "./types";
+import { TaskEditor } from "./TaskEditor";
+import type { TaskDraft } from "./TaskEditor";
+import { EntityEditor } from "./EntityEditor";
+import type { EntityDraft } from "./EntityEditor";
+import { TaskList, DropArea, ScheduledTaskList } from "./TaskList";
+import { SettingsPage } from "./SettingsPage";
+import { NotesApp, AppSwitcher } from "./NotesApp";
+import { Modal } from "./Modal";
+import { localDate } from "./dates";
+
+export function App() {
+  const location = useLocation();
+  const session = useResource<User>("/auth/me");
+  if (session.isPending)
+    return (
+      <div className="loading-screen">
+        <Leaf />
+        Abriendo tu espacio…
+      </div>
+    );
+  if (session.error instanceof ApiError && session.error.status === 401)
+    return <Login />;
+  if (session.isError)
+    return (
+      <div className="loading-screen">
+        <p role="alert">No se puede conectar con la API.</p>
+        <button
+          className="primary"
+          onClick={() => {
+            void session.refetch();
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  if (location.pathname.startsWith("/notes")) return <NotesApp />;
+  return <Workspace user={session.data} />;
+}
+function Login() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  const client = useQueryClient();
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError("");
+    try {
+      const user = await api<User>("/auth/login", "POST", {
+        username,
+        password,
+      });
+      client.setQueryData(["/auth/me"], user);
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <main className="login">
+      <div className="login-story">
+        <div className="brand">
+          <span className="brand-mark">
+            <Leaf size={24} />
+          </span>
+          personal life<span className="brand-period">.</span>
+        </div>
+        <div>
+          <div className="eyebrow">MENOS RUIDO. MÁS ESPACIO.</div>
+          <h1>
+            Haz sitio para
+            <br />
+            lo que importa<span>.</span>
+          </h1>
+          <p>
+            Tus ideas, tus planes y tu próximo paso.
+            <br />
+            Todo empieza por un poco de claridad.
+          </p>
+          <div className="login-art">
+            <div className="art-orbit orbit-one" />
+            <div className="art-orbit orbit-two" />
+            <div className="art-leaf">
+              <Leaf size={90} strokeWidth={1} />
+            </div>
+            <div className="art-note">
+              <Check size={16} />
+              Una cosa a la vez
+            </div>
+          </div>
+        </div>
+        <span className="muted">Un espacio personal para tu día a día.</span>
+      </div>
+      <section className="login-form">
+        <div className="eyebrow">BIENVENIDO A TU ESPACIO</div>
+        <h2>Qué bueno verte.</h2>
+        <p className="muted">Inicia sesión y continúa donde lo dejaste.</p>
+        <form
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+          className="editor"
+        >
+          <label>
+            Usuario
+            <input
+              autoFocus
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+            />
+          </label>
+          <label>
+            Contraseña
+            <input
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="primary" disabled={pending}>
+            {pending ? "Entrando…" : "Entrar"}
+            <ArrowUpRight size={16} />
+          </button>
+        </form>
+        <p className="login-footnote">
+          <Leaf size={13} />
+          Solo tú. A tu ritmo.
+        </p>
+      </section>
+    </main>
+  );
+}
+function Workspace({ user }: { user: User }) {
+  const projectQuery = useResource<Project[]>("/projects");
+  const sectionQuery = useResource<Section[]>("/sections");
+  const labelQuery = useResource<Label[]>("/labels");
+  const settingsQuery = useResource<Settings>("/settings");
+  const [draft, setDraft] = useState<TaskDraft | null>(null);
+  const [entity, setEntity] = useState<EntityDraft | null>(null);
+  const [sidebar, setSidebar] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sort, setSort] = useState("");
+  const [days, setDays] = useState("7");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    path: string;
+  } | null>(null);
+  const client = useQueryClient();
+  const location = useLocation();
+  const route = location.pathname;
+  const projectId = route.startsWith("/project/") ? route.slice(9) : null;
+  const labelId = route.startsWith("/label/") ? route.slice(7) : null;
+  const projects = projectQuery.data ?? [];
+  const sections = sectionQuery.data ?? [];
+  const labels = labelQuery.data ?? [];
+  const settings = settingsQuery.data;
+  const selectedProject = projects.find((project) => project.id === projectId);
+  const selectedLabel = labels.find((label) => label.id === labelId);
+  const view =
+    route === "/inbox"
+      ? "inbox"
+      : route === "/upcoming"
+        ? "upcoming"
+        : route === "/completed"
+          ? "completed"
+          : "today";
+  const params = new URLSearchParams({
+    sort: sort || settings?.default_sort || "manual",
+    days,
+  });
+  if (projectId) params.set("project_id", projectId);
+  if (labelId) params.set("label", labelId);
+  if (search) params.set("q", search);
+  const endpoint = search
+    ? "/search"
+    : projectId || labelId
+      ? "/tasks"
+      : `/views/${view}`;
+  const taskQuery = useResource<Task[]>(`${endpoint}?${params.toString()}`);
+  const tasks = taskQuery.data ?? [];
+  const openedTaskId = useRef<string | null>(null);
+  const linkedTaskId = new URLSearchParams(location.search).get("task");
+  const linkedTaskQuery = useResource<Task[]>("/tasks");
+  useEffect(() => {
+    const linkedTask = linkedTaskQuery.data?.find(
+      (task) => task.id === linkedTaskId,
+    );
+    if (linkedTask && openedTaskId.current !== linkedTaskId) {
+      openedTaskId.current = linkedTaskId;
+      setDraft({ task: linkedTask });
+    }
+  }, [linkedTaskId, linkedTaskQuery.data]);
+  const todayQuery = useResource<Task[]>("/views/today");
+  const completedQuery = useResource<Task[]>("/views/completed");
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  useEffect(() => {
+    setSidebar(false);
+    setSearch("");
+    setSearchOpen(false);
+    setSort("");
+  }, [route]);
+  useAppearance(settings);
+  useEffect(() => {
+    function keydown(event: KeyboardEvent) {
+      const editing =
+        event.target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) ||
+          event.target.isContentEditable);
+      if ((event.ctrlKey || event.metaKey) && event.key === "k") {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+      if (
+        !editing &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        event.key.toLowerCase() === "q" &&
+        !draft &&
+        !entity
+      ) {
+        event.preventDefault();
+        setDraft({ projectId });
+      }
+    }
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [draft, entity, projectId]);
+  async function mutate(path: string, method: string, body?: unknown) {
+    setBusy(true);
+    setError("");
+    try {
+      await api(path, method, body);
+      await client.invalidateQueries();
+      return true;
+    } catch (failure) {
+      setError(errorMessage(failure));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  function action(task: Task, actionName: string) {
+    if (actionName === "delete") {
+      setConfirmation({
+        title: "Eliminar tarea",
+        description: `Se eliminará «${task.title}» y todas sus subtareas. Esta acción no se puede deshacer.`,
+        path: `/tasks/${task.id}`,
+      });
+      return;
+    }
+    void mutate(`/tasks/${task.id}/${actionName}`, "POST", {});
+  }
+  function reorder(task: Task, direction: number) {
+    const siblings = tasks
+      .filter(
+        (candidate) =>
+          candidate.parent_task_id === task.parent_task_id &&
+          candidate.project_id === task.project_id &&
+          candidate.section_id === task.section_id,
+      )
+      .sort((left, right) => left.position - right.position);
+    const index = siblings.findIndex((candidate) => candidate.id === task.id);
+    if (index + direction < 0 || index + direction >= siblings.length) return;
+    const target = siblings[index + (direction > 0 ? 2 : -1)];
+    void mutate(`/tasks/${task.id}/reorder`, "PATCH", {
+      before_id: target?.id ?? null,
+    });
+  }
+  function reorderCollection(
+    collection: "projects" | "sections",
+    item: Project | Section,
+    direction: number,
+  ) {
+    const siblings =
+      collection === "projects" && "parent_project_id" in item
+        ? projects.filter(
+            (project) => project.parent_project_id === item.parent_project_id,
+          )
+        : sections.filter(
+            (section) =>
+              "project_id" in item && section.project_id === item.project_id,
+          );
+    const index = siblings.findIndex((candidate) => candidate.id === item.id);
+    if (index + direction < 0 || index + direction >= siblings.length) return;
+    void mutate(`/${collection}/${item.id}/reorder`, "PATCH", {
+      before_id: siblings[index + (direction > 0 ? 2 : -1)]?.id ?? null,
+    });
+  }
+  function dragEnd(event: DragEndEvent) {
+    const task = tasks.find((candidate) => candidate.id === event.active.id);
+    if (!task || !event.over || event.active.id === event.over.id) return;
+    const targetId = String(event.over.id);
+    if (targetId.startsWith("project:")) {
+      void mutate(`/tasks/${task.id}/move`, "PATCH", {
+        project_id: targetId.slice(8) || null,
+        section_id: null,
+        parent_task_id: null,
+      });
+      return;
+    }
+    if (targetId.startsWith("section:")) {
+      void mutate(`/tasks/${task.id}/move`, "PATCH", {
+        section_id: targetId.slice(8) || null,
+        parent_task_id: null,
+      });
+      return;
+    }
+    const targetTask = tasks.find((candidate) => candidate.id === targetId);
+    if (!targetTask) return;
+    if (
+      targetTask.section_id !== task.section_id ||
+      targetTask.parent_task_id !== task.parent_task_id ||
+      targetTask.project_id !== task.project_id
+    ) {
+      void mutate(`/tasks/${task.id}/move`, "PATCH", {
+        project_id: targetTask.project_id,
+        section_id: targetTask.section_id,
+        parent_task_id: targetTask.parent_task_id,
+      }).then((success) => {
+        if (success)
+          void mutate(`/tasks/${task.id}/reorder`, "PATCH", {
+            before_id: targetId,
+          });
+      });
+      return;
+    }
+    void mutate(`/tasks/${task.id}/reorder`, "PATCH", { before_id: targetId });
+  }
+  if (
+    settingsQuery.isError ||
+    projectQuery.isError ||
+    sectionQuery.isError ||
+    labelQuery.isError
+  )
+    return (
+      <div className="loading-screen">
+        <p role="alert">No se pudieron cargar tus datos.</p>
+        <button
+          onClick={() => {
+            void client.invalidateQueries();
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  if (!settings)
+    return <div className="loading-screen">Preparando tu espacio…</div>;
+  const today = localDate(settings.timezone);
+  const completedToday = (completedQuery.data ?? []).filter(
+    (task) =>
+      task.completed_at &&
+      localDate(settings.timezone, new Date(task.completed_at)) === today,
+  ).length;
+  const overdue = (todayQuery.data ?? []).filter(
+    (task) => task.due_date && task.due_date < today,
+  ).length;
+  const title = search
+    ? "Resultados de búsqueda"
+    : (selectedProject?.name ??
+      selectedLabel?.name ??
+      (view === "inbox"
+        ? "Bandeja de entrada"
+        : view === "upcoming"
+          ? "Próximo"
+          : view === "completed"
+            ? "Completadas"
+            : "Hoy"));
+  const listProps = {
+    projects,
+    labels,
+    settings,
+    edit: (task: Task) => setDraft({ task }),
+    addChild: (task: Task) => setDraft({ parent: task }),
+    action,
+    reorder,
+    busy,
+  };
+  return (
+    <DndContext sensors={sensors} onDragEnd={dragEnd}>
+      <div className="app-shell">
+        {sidebar && (
+          <button
+            aria-label="Cerrar navegación"
+            className="sidebar-backdrop"
+            onClick={() => setSidebar(false)}
+          />
+        )}
+        <aside className={`sidebar ${sidebar ? "open" : ""}`}>
+          <NavLink to="/today" className="brand">
+            <span className="brand-mark">
+              <Leaf size={22} />
+            </span>
+            personal life<span className="brand-period">.</span>
+          </NavLink>
+          <button className="workspace-select">
+            <span className="avatar">
+              {user.username.slice(0, 1).toUpperCase()}
+            </span>
+            <span>
+              Mi espacio personal<small>Un poco más de claridad</small>
+            </span>
+            <ChevronRight size={14} />
+          </button>
+          <button className="quick-add" onClick={() => setDraft({ projectId })}>
+            <Plus size={19} />
+            Añadir tarea<kbd>Q</kbd>
+          </button>
+          <button
+            className="sidebar-search"
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search size={17} />
+            Buscar<kbd>⌘ K</kbd>
+          </button>
+          <nav aria-label="Navegación principal">
+            <DropArea id="project:">
+              <NavLink to="/inbox">
+                <Inbox size={18} />
+                Bandeja de entrada
+              </NavLink>
+            </DropArea>
+            <NavLink to="/today">
+              <Sun size={18} />
+              Hoy
+              <span className="nav-count">{todayQuery.data?.length ?? 0}</span>
+            </NavLink>
+            <NavLink to="/upcoming">
+              <CalendarDays size={18} />
+              Próximo
+            </NavLink>
+            <NavLink to="/completed">
+              <CheckCheck size={18} />
+              Completadas
+            </NavLink>
+          </nav>
+          {projects.some(
+            (project) => project.favorite && !project.archived,
+          ) && (
+            <>
+              <div className="nav-heading">FAVORITOS</div>
+              <nav>
+                {projects
+                  .filter((project) => project.favorite && !project.archived)
+                  .map((project) => (
+                    <NavLink key={project.id} to={`/project/${project.id}`}>
+                      <span className="accent-marker">#</span>
+                      {project.name}
+                    </NavLink>
+                  ))}
+              </nav>
+            </>
+          )}
+          <div className="nav-heading">
+            MIS PROYECTOS
+            <button
+              aria-label="Nuevo proyecto"
+              className="icon-button"
+              onClick={() => setEntity({ kind: "projects" })}
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+          <nav className="project-nav">
+            <ProjectTree
+              projects={projects.filter((project) => !project.archived)}
+              parentId={null}
+            />
+            {projects.filter((project) => !project.archived).length === 0 && (
+              <p className="sidebar-hint">Dale un lugar a tus planes.</p>
+            )}
+          </nav>
+          <NavLink className="manage-link" to="/projects">
+            <Folder size={15} />
+            Gestionar proyectos
+          </NavLink>
+          <div className="sidebar-divider" />
+          <nav>
+            <NavLink to="/labels">
+              <Tag size={17} />
+              Etiquetas
+            </NavLink>
+            {labels
+              .filter((label) => label.favorite)
+              .map((label) => (
+                <NavLink key={label.id} to={`/label/${label.id}`}>
+                  <span className="accent-marker">#</span>
+                  {label.name}
+                </NavLink>
+              ))}
+          </nav>
+          <div className="sidebar-bottom">
+            <div className="sidebar-note">
+              <Leaf size={17} />
+              <span>
+                Pequeños pasos.
+                <br />
+                <strong>Grandes cambios.</strong>
+              </span>
+            </div>
+            <nav>
+              <NavLink to="/configuration">
+                <SettingsIcon size={17} />
+                Configuración
+              </NavLink>
+              <button
+                onClick={() => {
+                  void mutate("/auth/logout", "POST", {}).then((success) => {
+                    if (success) client.clear();
+                  });
+                }}
+              >
+                <LogOut size={17} />
+                Cerrar sesión
+              </button>
+            </nav>
+            <div className="version">
+              PERSONAL LIFE <span>Tu día, a tu ritmo.</span>
+            </div>
+          </div>
+        </aside>
+        <div className="main-shell">
+          <header className="topbar">
+            <div>
+              <button
+                className="icon-button mobile-menu"
+                aria-label="Abrir navegación"
+                onClick={() => setSidebar(true)}
+              >
+                <Menu size={20} />
+              </button>
+              <span className="breadcrumb">
+                Mi espacio
+                <ChevronRight size={13} />
+                <strong>
+                  {route === "/configuration"
+                    ? "Configuración"
+                    : route === "/projects"
+                      ? "Proyectos"
+                      : route === "/labels"
+                        ? "Etiquetas"
+                        : title}
+                </strong>
+              </span>
+            </div>
+            <div className="topbar-right">
+              <AppSwitcher />
+              <span className="today-date">
+                {new Intl.DateTimeFormat("es-ES", {
+                  timeZone: settings.timezone,
+                  day: "numeric",
+                  month: "long",
+                }).format(new Date())}
+              </span>
+              <span className="private-pill">
+                <span />
+                Personal
+              </span>
+              <span className="avatar small">
+                {user.username.slice(0, 1).toUpperCase()}
+              </span>
+            </div>
+          </header>
+          <main className="main-content">
+            {error && (
+              <div className="error banner" role="alert">
+                {error}
+                <button
+                  className="icon-button"
+                  aria-label="Cerrar error"
+                  onClick={() => setError("")}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+            {route === "/configuration" ? (
+              <SettingsPage settings={settings} />
+            ) : route === "/projects" || route === "/labels" ? (
+              <>
+                <div className="eyebrow">TODO EN SU LUGAR</div>
+                <div className="page-heading">
+                  <h1>{route === "/projects" ? "Proyectos" : "Etiquetas"}</h1>
+                  <button
+                    className="primary"
+                    onClick={() =>
+                      setEntity(
+                        route === "/projects"
+                          ? { kind: "projects" }
+                          : { kind: "labels" },
+                      )
+                    }
+                  >
+                    <Plus size={16} />
+                    Crear
+                  </button>
+                </div>
+                <p className="page-subtitle">
+                  Organiza tus tareas de la forma que tenga sentido para ti.
+                </p>
+                <div className="entity-grid">
+                  {(route === "/projects" ? projects : labels).map(
+                    (item: Project | Label) => (
+                      <article className="entity-card" key={item.id}>
+                        <NavLink
+                          to={`/${route === "/projects" ? "project" : "label"}/${item.id}`}
+                        >
+                          <span className="accent-marker">#</span>
+                          <h2>{item.name}</h2>
+                        </NavLink>
+                        {"archived" in item && item.archived && (
+                          <span className="tag">Archivado</span>
+                        )}
+                        <div>
+                          {"archived" in item && (
+                            <>
+                              <button
+                                aria-label={`Subir proyecto ${item.name}`}
+                                onClick={() =>
+                                  reorderCollection("projects", item, -1)
+                                }
+                              >
+                                ↑
+                              </button>
+                              <button
+                                aria-label={`Bajar proyecto ${item.name}`}
+                                onClick={() =>
+                                  reorderCollection("projects", item, 1)
+                                }
+                              >
+                                ↓
+                              </button>
+                            </>
+                          )}
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              setEntity(
+                                "archived" in item
+                                  ? { kind: "projects", value: item }
+                                  : { kind: "labels", value: item },
+                              )
+                            }
+                          >
+                            Editar
+                          </button>
+                          <button
+                            className="text-button danger"
+                            onClick={() =>
+                              setConfirmation({
+                                title: "Eliminar",
+                                description: `Eliminar «${item.name}». Sus tareas se conservarán${route === "/projects" ? " en la bandeja de entrada" : ""}.`,
+                                path: `${route}/${item.id}`,
+                              })
+                            }
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </article>
+                    ),
+                  )}
+                </div>
+                {(route === "/projects" ? projects : labels).length === 0 && (
+                  <Empty
+                    title="Empieza a organizar tu espacio"
+                    text="Crea tu primer elemento con el botón de arriba."
+                  />
+                )}
+              </>
+            ) : (
+              <>
+                <div className="eyebrow">
+                  {!projectId && !labelId && view === "today"
+                    ? "UN NUEVO DÍA, A TU RITMO"
+                    : projectId
+                      ? "UN ESPACIO PARA TUS PLANES"
+                      : "UN POCO MÁS DE CLARIDAD"}
+                </div>
+                <div className="page-heading">
+                  <div>
+                    <h1>
+                      {title}
+                      {view === "today" &&
+                        !projectId &&
+                        !labelId &&
+                        !search && (
+                          <span className="heading-sun" aria-hidden="true">
+                            ☀
+                          </span>
+                        )}
+                    </h1>
+                    <p className="page-subtitle">
+                      {selectedProject?.description ||
+                        (view === "today"
+                          ? "Pon el foco en lo que importa. Lo demás puede esperar."
+                          : view === "completed"
+                            ? "Cada pequeño paso cuenta. Mira todo lo que has avanzado."
+                            : "Tus próximos pasos, con espacio para lo que venga.")}
+                    </p>
+                  </div>
+                  <button
+                    className="primary add-main"
+                    onClick={() => setDraft({ projectId })}
+                  >
+                    <Plus size={16} />
+                    Añadir tarea
+                  </button>
+                </div>
+                {!projectId && !labelId && view === "today" && !search && (
+                  <div className="stats-grid">
+                    <div className="stat-card">
+                      <span className="stat-icon green">
+                        <Sun size={20} />
+                      </span>
+                      <div>
+                        <span>Para hoy</span>
+                        <strong>
+                          {
+                            (todayQuery.data ?? []).filter(
+                              (task) => task.due_date === today,
+                            ).length
+                          }
+                          <small>tareas por hacer</small>
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-icon orange">
+                        <CalendarDays size={20} />
+                      </span>
+                      <div>
+                        <span>Atrasadas</span>
+                        <strong>
+                          {overdue}
+                          <small>
+                            {overdue === 0
+                              ? "todo al día"
+                              : "puedes retomarlas hoy"}
+                          </small>
+                        </strong>
+                      </div>
+                    </div>
+                    <div className="stat-card">
+                      <span className="stat-icon purple">
+                        <CheckCheck size={20} />
+                      </span>
+                      <div>
+                        <span>Completadas hoy</span>
+                        <strong>
+                          {completedToday}
+                          <small>pequeñas victorias</small>
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="list-toolbar">
+                  <div className="list-title">
+                    <span className="list-icon">☷</span>Mis tareas
+                    <span className="count-badge">{tasks.length}</span>
+                  </div>
+                  <div>
+                    {selectedProject && (
+                      <>
+                        <button
+                          className="text-button"
+                          onClick={() =>
+                            setEntity({
+                              kind: "sections",
+                              projectId: selectedProject.id,
+                            })
+                          }
+                        >
+                          <Plus size={14} />
+                          Nueva sección
+                        </button>
+                        <button
+                          className="icon-button"
+                          aria-label="Editar proyecto"
+                          onClick={() =>
+                            setEntity({
+                              kind: "projects",
+                              value: selectedProject,
+                            })
+                          }
+                        >
+                          <SlidersHorizontal size={16} />
+                        </button>
+                      </>
+                    )}
+                    {view === "upcoming" && !projectId && (
+                      <select
+                        aria-label="Días próximos"
+                        value={days}
+                        onChange={(event) => setDays(event.target.value)}
+                      >
+                        <option value="7">7 días</option>
+                        <option value="14">14 días</option>
+                        <option value="30">30 días</option>
+                      </select>
+                    )}
+                    <select
+                      aria-label="Ordenar tareas"
+                      value={sort || settings.default_sort}
+                      onChange={(event) => setSort(event.target.value)}
+                    >
+                      <option value="manual">Orden manual</option>
+                      <option value="date">Fecha</option>
+                      <option value="priority">Prioridad</option>
+                      <option value="created">Creación</option>
+                      <option value="name">Nombre</option>
+                    </select>
+                  </div>
+                </div>
+                {taskQuery.isPending ? (
+                  <p className="muted loading">Cargando tareas…</p>
+                ) : taskQuery.isError ? (
+                  <p role="alert" className="error">
+                    No se pudieron cargar las tareas.{" "}
+                    <button
+                      onClick={() => {
+                        void taskQuery.refetch();
+                      }}
+                    >
+                      Reintentar
+                    </button>
+                  </p>
+                ) : selectedProject ? (
+                  <>
+                    <DropArea id="section:">
+                      <h3 className="section-title">Sin sección</h3>
+                      <TaskList
+                        {...listProps}
+                        tasks={tasks.filter((task) => !task.section_id)}
+                      />
+                      <button
+                        className="inline-add"
+                        onClick={() => setDraft({ projectId })}
+                      >
+                        <Plus size={16} />
+                        Añadir tarea
+                      </button>
+                    </DropArea>
+                    {sections
+                      .filter((section) => section.project_id === projectId)
+                      .map((section) => (
+                        <DropArea id={`section:${section.id}`} key={section.id}>
+                          <div className="section-heading">
+                            <h3 className="section-title">{section.name}</h3>
+                            <div>
+                              <button
+                                aria-label={`Subir sección ${section.name}`}
+                                onClick={() =>
+                                  reorderCollection("sections", section, -1)
+                                }
+                              >
+                                ↑
+                              </button>
+                              <button
+                                aria-label={`Bajar sección ${section.name}`}
+                                onClick={() =>
+                                  reorderCollection("sections", section, 1)
+                                }
+                              >
+                                ↓
+                              </button>
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  setEntity({
+                                    kind: "sections",
+                                    value: section,
+                                    projectId: section.project_id,
+                                  })
+                                }
+                              >
+                                Editar
+                              </button>
+                              <button
+                                className="text-button danger"
+                                onClick={() =>
+                                  setConfirmation({
+                                    title: "Eliminar sección",
+                                    description:
+                                      "Las tareas se conservarán sin sección dentro del proyecto.",
+                                    path: `/sections/${section.id}`,
+                                  })
+                                }
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          </div>
+                          <TaskList
+                            {...listProps}
+                            tasks={tasks.filter(
+                              (task) => task.section_id === section.id,
+                            )}
+                          />
+                          {tasks.every(
+                            (task) => task.section_id !== section.id,
+                          ) && (
+                            <p className="section-empty">
+                              Arrastra tareas aquí para organizarlas.
+                            </p>
+                          )}
+                        </DropArea>
+                      ))}
+                  </>
+                ) : tasks.length === 0 ? (
+                  <Empty
+                    title={
+                      view === "completed"
+                        ? "Tus avances tendrán su lugar aquí"
+                        : search
+                          ? "No encontramos esas tareas"
+                          : "Un poco de espacio para respirar"
+                    }
+                    text={
+                      view === "completed"
+                        ? "Las tareas que completes aparecerán en esta vista."
+                        : search
+                          ? "Prueba con otro título, proyecto o etiqueta."
+                          : "No tienes tareas en esta vista. Añade tu próximo paso cuando quieras."
+                    }
+                  />
+                ) : !search &&
+                  !labelId &&
+                  (view === "today" || view === "upcoming") ? (
+                  <ScheduledTaskList
+                    {...listProps}
+                    tasks={tasks}
+                    today={today}
+                  />
+                ) : (
+                  <TaskList {...listProps} tasks={tasks} />
+                )}
+                {!selectedProject && (
+                  <button
+                    className="inline-add"
+                    onClick={() => setDraft({ projectId })}
+                  >
+                    <Plus size={17} />
+                    Añadir tarea<span>Pulsa Q para añadir rápidamente</span>
+                  </button>
+                )}
+                <div className="page-bottom-note">
+                  <Leaf size={16} />
+                  <span>
+                    No tienes que hacerlo todo hoy. Solo dar el siguiente paso.
+                  </span>
+                </div>
+              </>
+            )}
+          </main>
+          <footer className="main-footer">
+            <span>
+              <span className="status-dot" />
+              Tu espacio personal
+            </span>
+            <span>
+              <CircleHelp size={13} />Q para añadir · Ctrl K para buscar
+            </span>
+          </footer>
+        </div>
+        {draft && (
+          <TaskEditor
+            draft={draft}
+            projects={projects}
+            sections={sections}
+            labels={labels}
+            timezone={settings.timezone}
+            onClose={() => setDraft(null)}
+          />
+        )}{" "}
+        {entity && (
+          <EntityEditor
+            draft={entity}
+            projects={projects}
+            onClose={() => setEntity(null)}
+          />
+        )}{" "}
+        {searchOpen && (
+          <Modal
+            title="Buscar en tu espacio"
+            onClose={() => setSearchOpen(false)}
+          >
+            <form
+              className="editor"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSearchOpen(false);
+              }}
+            >
+              <label>
+                Buscar tareas
+                <input
+                  autoFocus
+                  placeholder="Título, descripción, proyecto o etiqueta…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </label>
+              <button className="primary">Ver resultados</button>
+            </form>
+          </Modal>
+        )}{" "}
+        {confirmation && (
+          <Modal
+            title={confirmation.title}
+            onClose={() => setConfirmation(null)}
+          >
+            <div className="editor">
+              <p>{confirmation.description}</p>
+              <footer className="form-footer">
+                <button
+                  className="secondary"
+                  onClick={() => setConfirmation(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="danger-button"
+                  disabled={busy}
+                  onClick={() => {
+                    void mutate(confirmation.path, "DELETE").then((success) => {
+                      if (success) setConfirmation(null);
+                    });
+                  }}
+                >
+                  Eliminar definitivamente
+                </button>
+              </footer>
+            </div>
+          </Modal>
+        )}
+      </div>
+    </DndContext>
+  );
+}
+function ProjectTree({
+  projects,
+  parentId,
+}: {
+  projects: Project[];
+  parentId: string | null;
+}) {
+  return (
+    <>
+      {projects
+        .filter(
+          (project) =>
+            project.parent_project_id === parentId ||
+            (parentId === null &&
+              project.parent_project_id &&
+              !projects.some(
+                (candidate) => candidate.id === project.parent_project_id,
+              )),
+        )
+        .map((project) => (
+          <div className="project-branch" key={project.id}>
+            <DropArea id={`project:${project.id}`}>
+              <NavLink to={`/project/${project.id}`}>
+                <span className="project-hash accent-marker">
+                  #
+                </span>
+                {project.name}
+              </NavLink>
+            </DropArea>
+            <div className="project-children">
+              <ProjectTree projects={projects} parentId={project.id} />
+            </div>
+          </div>
+        ))}
+    </>
+  );
+}
+function Empty({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-illustration">
+        <Leaf size={35} strokeWidth={1.3} />
+        <span />
+      </div>
+      <h3>{title}</h3>
+      <p>{text}</p>
+    </div>
+  );
+}

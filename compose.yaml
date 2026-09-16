@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: personal_life
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d personal_life"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build:
+      context: ./api
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/${POSTGRES_DB:-personal_life}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./api
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-local-development-only}@postgres:5432/${POSTGRES_DB:-personal_life}?sslmode=disable
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+      LISTEN_ADDR: 0.0.0.0:8080
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      INITIAL_USERNAME: ${INITIAL_USERNAME:-owner}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:5173:80"
+    restart: unless-stopped
+volumes:
+  postgres_data:
