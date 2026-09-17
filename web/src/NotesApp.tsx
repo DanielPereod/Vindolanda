@@ -6,6 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
   Calendar,
+  Check,
+  Code2,
   Copy,
   Download,
   FileText,
@@ -18,6 +20,7 @@ import {
   Pencil,
   Plus,
   Settings as SettingsIcon,
+  Share2,
   Table2,
   Tag,
   Trash2,
@@ -27,17 +30,17 @@ import { api, errorMessage, useResource } from "./api";
 import { filterNotes } from "./notes";
 import type { Note, NoteInput, NoteFolder, NoteLink } from "./notes";
 import { NoteExplorer, NoteTrash } from "./NoteExplorer";
+import { GraphView } from "./GraphView";
 import { SidebarFooter, SidebarToggle } from "./SidebarToggle";
 import { useSidebarState } from "./useSidebarState";
 import { useAppearance } from "./useAppearance";
 import type { Label, Project, Section, Task, Settings } from "./types";
-import { NoteEditor } from "./NoteEditor";
+import { NoteEditor, type NoteViewMode } from "./NoteEditor";
 import { AttachmentLibrary } from "./AttachmentLibrary";
 import { Dropdown } from "./Dropdown";
 import { WorkspaceTools } from "./WorkspaceTools";
 import { CanvasBoard } from "./CanvasBoard";
 import { TaskEditor } from "./TaskEditor";
-import { loadNotesPreferences } from "./preferences";
 
 const icons = { note: FileText, base: Table2, canvas: Network };
 const labels = { note: "Nota", base: "Base", canvas: "Canvas" };
@@ -54,11 +57,13 @@ export function NotesApp() {
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [preferences] = useState(() => loadNotesPreferences());
   const client = useQueryClient();
   useEffect(() => setPending(false), [location.pathname]);
   function shouldConfirm(message: string) {
-    return !preferences.confirmDiscard || window.confirm(message);
+    return (
+      settings.data?.notes_confirm_discard === false ||
+      window.confirm(message)
+    );
   }
   const notes = query.data ?? [];
   const selected = notes.find(
@@ -106,6 +111,7 @@ export function NotesApp() {
     };
   }, []);
   const canvasActive = selected?.kind === "canvas";
+  const graphActive = location.pathname === "/notes/graph";
   useEffect(() => {
     if (selected)
       setOpenTabs((tabs) =>
@@ -262,6 +268,10 @@ export function NotesApp() {
               void create(kind, undefined, folderId)
             }
           />
+          <NavLink className="notes-trash-link" to="/notes/graph">
+            <Share2 size={15} />
+            Gráfico
+          </NavLink>
           <NavLink className="notes-trash-link" to="/notes/attachments">
             <ImageIcon size={15} />
             Adjuntos
@@ -289,7 +299,9 @@ export function NotesApp() {
           </div>
         </aside>
         <main
-          className={`notes-main${canvasActive ? " notes-main--canvas" : ""}`}
+          className={`notes-main${canvasActive ? " notes-main--canvas" : ""}${
+            graphActive ? " notes-main--graph" : ""
+          }`}
         >
           {!navOpen && (
             <div className="topbar">
@@ -300,6 +312,7 @@ export function NotesApp() {
               />
             </div>
           )}
+          {!graphActive && (
           <div className="notes-sticky-bar">
             <nav className="document-tabs" aria-label="Pestañas abiertas">
               {openTabs.map((identifier) => {
@@ -343,12 +356,19 @@ export function NotesApp() {
             </nav>
             <div className="notes-sticky-actions" id="notes-sticky-actions" />
           </div>
+          )}
           {error && (
             <p role="alert" className="error">
               {error}
             </p>
           )}
-          {location.pathname === "/notes/trash" ? (
+          {graphActive ? (
+            <GraphView
+              notes={notes}
+              onOpen={(identifier) => openTool(`/notes/${identifier}`)}
+              onCreateNote={(title) => create("note", title)}
+            />
+          ) : location.pathname === "/notes/trash" ? (
             <NoteTrash
               onRestore={(identifier) => navigate(`/notes/${identifier}`)}
             />
@@ -467,6 +487,9 @@ function Document({
   const [pending, setPending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [linkedTask, setLinkedTask] = useState<Task | null>(null);
+  const [reading, setReading] = useState(false);
+  const [source, setSource] = useState(false);
+  const view: NoteViewMode = reading ? "reading" : source ? "source" : "live";
   const client = useQueryClient();
   const navigate = useNavigate();
   const folders = useResource<NoteFolder[]>("/note-folders");
@@ -636,6 +659,13 @@ function Document({
     setMoveOpen(false);
     setMenuPos({ x: Math.max(8, x), y: Math.max(8, y) });
   }
+  function toggleReading() {
+    setReading((value) => !value);
+  }
+  function revealSource() {
+    setSource(true);
+    setReading(false);
+  }
   async function copyText(value: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -774,6 +804,60 @@ function Document({
         event.stopPropagation();
       }}
     >
+      {input.kind === "note" && (
+        <>
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={reading}
+            className="explorer-context-item"
+            onClick={() => {
+              toggleReading();
+              closeMenu();
+            }}
+          >
+            <span className="explorer-context-icon" aria-hidden="true">
+              <BookOpen size={14} />
+            </span>
+            <span>Modo lectura</span>
+            {reading && (
+              <Check
+                size={14}
+                aria-hidden="true"
+                className="explorer-context-arrow"
+              />
+            )}
+          </button>
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={source}
+            className="explorer-context-item"
+            onClick={() => {
+              if (source) {
+                setSource(false);
+              } else {
+                setSource(true);
+                setReading(false);
+              }
+              closeMenu();
+            }}
+          >
+            <span className="explorer-context-icon" aria-hidden="true">
+              <Code2 size={14} />
+            </span>
+            <span>Modo fuente</span>
+            {source && (
+              <Check
+                size={14}
+                aria-hidden="true"
+                className="explorer-context-arrow"
+              />
+            )}
+          </button>
+          <div className="explorer-context-separator" role="separator" />
+        </>
+      )}
       <button
         type="button"
         role="menuitem"
@@ -963,6 +1047,9 @@ function Document({
               links={outgoing.data}
               onChange={(content) => setInput({ ...input, content })}
               onWiki={wiki}
+              view={view}
+              onToggleReading={toggleReading}
+              onRevealSource={revealSource}
             />
           </>
         )}

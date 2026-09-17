@@ -424,7 +424,7 @@ test("renamed links display the new title and navigate by original identity", as
   await expect(
     page.getByRole("textbox", { name: "Título de nota" }),
   ).toHaveValue("Source");
-  await page.getByRole("button", { name: "Cambiar modo de vista" }).click();
+  await page.getByRole("button", { name: "Más opciones" }).click();
   await page
     .getByRole("menuitemradio", { name: "Modo lectura", exact: true })
     .click();
@@ -447,15 +447,23 @@ test("renamed links display the new title and navigate by original identity", as
 test("continuous editing autosaves without replacing newer input", async ({
   page,
 }) => {
+  async function enterSourceMode() {
+    await page.getByRole("button", { name: "Más opciones" }).click();
+    await page
+      .getByRole("menuitemradio", { name: "Modo fuente", exact: true })
+      .click();
+  }
   await page.goto("/notes");
   await page.getByRole("button", { name: "Nota", exact: true }).click();
-  const editor = page.getByRole("textbox", { name: "Contenido Markdown" });
+  await enterSourceMode();
+  const editor = page.locator(".continuous-source");
   await editor.fill("# First\n\nA continuous document");
   await expect(page.locator('.notes-toolbar [role="status"]')).toHaveText(
     "Guardado",
   );
   await expect(page.getByRole("button", { name: /bloque/i })).toHaveCount(0);
   await page.reload();
+  await enterSourceMode();
   await expect(editor).toHaveValue("# First\n\nA continuous document");
   await page.route("**/api/v1/notes/*", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -471,6 +479,7 @@ test("continuous editing autosaves without replacing newer input", async ({
     "Guardado",
   );
   await page.reload();
+  await enterSourceMode();
   await expect(editor).toHaveValue("Newer draft while saving");
 });
 
@@ -504,7 +513,7 @@ test("notes persist, navigate wiki links, organize a base and connect canvas car
   await expect(page.locator('.notes-toolbar [role="status"]')).toHaveText(
     "Guardado",
   );
-  await page.getByRole("button", { name: "Cambiar modo de vista" }).click();
+  await page.getByRole("button", { name: "Más opciones" }).click();
   await page
     .getByRole("menuitemradio", { name: "Modo lectura", exact: true })
     .click();
@@ -516,7 +525,7 @@ test("notes persist, navigate wiki links, organize a base and connect canvas car
     page.getByRole("button", { name: "Segunda idea", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "Cambiar modo de vista" }).click();
+  await page.getByRole("button", { name: "Más opciones" }).click();
   await page
     .getByRole("menuitemradio", { name: "Modo lectura", exact: true })
     .click();
@@ -636,10 +645,6 @@ test("live preview renders Markdown inline and follows wikilinks", async ({
     .locator(".notes-sidebar")
     .getByRole("button", { name: "Live source", exact: true })
     .click();
-  await page.getByRole("button", { name: "Cambiar modo de vista" }).click();
-  await page
-    .getByRole("menuitemradio", { name: "Vista previa en vivo" })
-    .click();
   const preview = page.locator(".live-preview");
   await expect(
     preview.locator(".cm-lp-wiki", { hasText: "Live target" }),
@@ -652,6 +657,37 @@ test("live preview renders Markdown inline and follows wikilinks", async ({
   await expect(
     page.getByRole("textbox", { name: "Título de nota" }),
   ).toHaveValue("Live target");
+});
+
+test("Ctrl E toggles reading against live or source mode", async ({ page }) => {
+  await page.goto("/notes");
+  await page.getByRole("button", { name: "Nota", exact: true }).click();
+  await page.getByRole("textbox", { name: "Título de nota" }).fill("Modos");
+  const source = page.locator(".continuous-source");
+  const reading = page.locator(".editor-page > .markdown");
+  const live = page.locator(".live-preview");
+  await expect(page.locator(".editor-mode-bar")).toHaveCount(0);
+  await expect(live).toBeVisible();
+  await page.keyboard.press("Control+e");
+  await expect(reading).toBeVisible();
+  await expect(live).toHaveCount(0);
+  await page.keyboard.press("Control+e");
+  await expect(live).toBeVisible();
+  await page.getByRole("button", { name: "Más opciones" }).click();
+  await page
+    .getByRole("menuitemradio", { name: "Modo fuente", exact: true })
+    .click();
+  await expect(source).toBeVisible();
+  await page.keyboard.press("Control+e");
+  await expect(reading).toBeVisible();
+  await page.keyboard.press("Control+e");
+  await expect(source).toBeVisible();
+  await expect(live).toHaveCount(0);
+  await page.getByRole("button", { name: "Más opciones" }).click();
+  await page
+    .getByRole("menuitemradio", { name: "Modo fuente", exact: true })
+    .click();
+  await expect(live).toBeVisible();
 });
 
 test("task editor saves note associations and notes show the backlink", async ({
@@ -759,4 +795,55 @@ test("canvas note cards always render the Markdown live view", async ({
     .click();
   await toolbar.getByRole("menuitemradio", { name: "Verde" }).click();
   await expect(card).toHaveCSS("border-color", "rgb(34, 197, 94)");
+});
+
+test("graph view exposes filters, groups and live node counts", async ({
+  page,
+}) => {
+  await page.goto("/notes");
+  await page.getByRole("button", { name: "Nota", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Título de nota" })
+    .fill("AlfaGrafo");
+  await page.getByRole("button", { name: "Más opciones" }).click();
+  await page.getByRole("menuitemradio", { name: "Modo fuente" }).click();
+  await page
+    .getByRole("textbox", { name: "Contenido Markdown" })
+    .fill("Enlaza con [[BetaGrafo]] y una #idea.");
+  await expect(page.locator('.notes-toolbar [role="status"]')).toHaveText(
+    "Guardado",
+  );
+  await page.getByRole("button", { name: "Nota", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Título de nota" })
+    .fill("BetaGrafo");
+  await expect(page.locator('.notes-toolbar [role="status"]')).toHaveText(
+    "Guardado",
+  );
+
+  await page
+    .locator(".notes-sidebar")
+    .getByRole("link", { name: "Gráfico" })
+    .click();
+  const hud = page.locator(".graph-hud");
+  await expect(hud).toContainText("3 nodos · 2 enlaces");
+
+  // Las etiquetas se pueden ocultar sin perder el enlace entre notas.
+  await page.getByRole("checkbox", { name: "Etiquetas" }).uncheck();
+  await expect(hud).toContainText("2 nodos · 1 enlaces");
+
+  // La consulta filtra por título y deja el nodo sin enlaces.
+  await page
+    .getByRole("textbox", { name: "Filtrar el gráfico" })
+    .fill("AlfaGrafo");
+  await expect(hud).toContainText("1 nodos · 0 enlaces");
+
+  // Un grupo con color personalizado se lista y se puede quitar.
+  await page
+    .getByRole("textbox", { name: "Consulta del grupo" })
+    .fill("tag:#idea");
+  await page.getByRole("button", { name: "Añadir grupo" }).click();
+  await expect(page.locator(".graph-group-query")).toHaveText("tag:#idea");
+  await page.getByRole("button", { name: "Quitar grupo tag:#idea" }).click();
+  await expect(page.locator(".graph-group-query")).toHaveCount(0);
 });

@@ -89,7 +89,7 @@ Today and Upcoming sort by date, time (untimed last), priority and manual positi
 
 ## Settings
 
-`GET /settings` returns preferences. `PUT /settings` accepts any subset of known preference fields, preserving the others: `timezone`, `language` (`es` in the MVP), `week_start` (0/1), `hour_format` (12/24 as strings), `date_format` (`DD/MM/YYYY`/`YYYY-MM-DD`), `theme` (`light`/`dark`/`system`), `accent_color` (one of the supported palette values), `default_sort`, `browser_notifications`.
+`GET /settings` returns preferences. `PUT /settings` accepts any subset of known preference fields, preserving the others: `timezone`, `language` (`es` in the MVP), `week_start` (0/1), `hour_format` (12/24 as strings), `date_format` (`DD/MM/YYYY`/`YYYY-MM-DD`), `theme` (`light`/`dark`/`system`), `accent_color` (one of the supported palette values), `default_sort`, `browser_notifications`, `notes_confirm_discard`, `nutrition_base_unit` (`g`/`ml`/`unit`).
 
 The notification preference is reserved for the reminder phase; the MVP does not deliver notifications. Week-start is stored for the future calendar. Unknown JSON fields are rejected.
 

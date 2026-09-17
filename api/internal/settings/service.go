@@ -27,5 +27,8 @@ func Validate(value Settings) error {
 	if !slices.Contains([]string{"#2563eb", "#7c3aed", "#15803d", "#c2410c", "#be123c"}, value.AccentColor) {
 		return core.Invalid("Invalid accent color")
 	}
+	if !slices.Contains([]string{"g", "ml", "unit"}, value.NutritionBaseUnit) {
+		return core.Invalid("Invalid nutrition base unit")
+	}
 	return nil
 }

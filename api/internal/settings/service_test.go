@@ -23,7 +23,7 @@ func TestTimezoneDatabaseIsEmbedded(testingContext *testing.T) {
 }
 
 func TestValidate(testingContext *testing.T) {
-	value := Settings{Timezone: "Europe/Madrid", Language: "es", WeekStart: 1, HourFormat: "24", DateFormat: "DD/MM/YYYY", Theme: "system", AccentColor: "#2563eb", DefaultSort: "manual"}
+	value := Settings{Timezone: "Europe/Madrid", Language: "es", WeekStart: 1, HourFormat: "24", DateFormat: "DD/MM/YYYY", Theme: "system", AccentColor: "#2563eb", DefaultSort: "manual", NotesConfirmDiscard: true, NutritionBaseUnit: "g"}
 	if operationError := Validate(value); operationError != nil {
 		testingContext.Fatal(operationError)
 	}
@@ -35,5 +35,10 @@ func TestValidate(testingContext *testing.T) {
 	value.Timezone = "Not/AZone"
 	if operationError := Validate(value); operationError == nil {
 		testingContext.Fatal("invalid timezone accepted")
+	}
+	value.Timezone = "Europe/Madrid"
+	value.NutritionBaseUnit = "oz"
+	if operationError := Validate(value); operationError == nil {
+		testingContext.Fatal("unsupported nutrition base unit accepted")
 	}
 }

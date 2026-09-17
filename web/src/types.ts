@@ -299,4 +299,6 @@ export interface Settings {
   accent_color: import("./appearance").AccentColor;
   default_sort: string;
   browser_notifications: boolean;
+  notes_confirm_discard: boolean;
+  nutrition_base_unit: "g" | "ml" | "unit";
 }

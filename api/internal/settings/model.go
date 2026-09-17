@@ -12,4 +12,6 @@ type Settings struct {
 	AccentColor          string `json:"accent_color"`
 	DefaultSort          string `json:"default_sort"`
 	BrowserNotifications bool   `json:"browser_notifications"`
+	NotesConfirmDiscard  bool   `json:"notes_confirm_discard"`
+	NutritionBaseUnit    string `json:"nutrition_base_unit"`
 }

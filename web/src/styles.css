@@ -180,7 +180,7 @@ input[type="color"] {
 }
 .main-shell .topbar:has(.floating) {
   position: fixed;
-  top: 18px;
+  bottom: 18px;
   left: 16px;
   z-index: 10;
   padding: 0;
@@ -2010,67 +2010,6 @@ details p {
   outline: 1px solid var(--line);
   outline-offset: 6px;
 }
-.editor-mode-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 1px solid var(--line);
-  padding: 10px 0;
-}
-.editor-mode-bar > span {
-  margin-right: auto;
-  font-size: 12px;
-  opacity: 0.65;
-}
-.editor-mode-bar button {
-  padding: 5px 10px;
-  font-size: 12px;
-}
-.editor-mode-bar kbd {
-  font-size: 11px;
-  opacity: 0.6;
-}
-.editor-mode-menu {
-  position: relative;
-}
-.editor-mode-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.editor-mode-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
-  min-width: 230px;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-}
-.editor-mode-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  text-align: left;
-}
-.editor-mode-item:hover,
-.editor-mode-item:focus-visible {
-  background: var(--soft);
-}
-.editor-mode-check {
-  margin-left: auto;
-  opacity: 0.8;
-}
 .editor-status {
   text-align: right;
   padding: 12px 0;
@@ -2223,7 +2162,7 @@ details p {
 }
 .notes-main .topbar:has(.floating) {
   position: fixed;
-  top: 20px;
+  bottom: 20px;
   left: 16px;
   z-index: 10;
   padding: 0;
@@ -3528,7 +3467,7 @@ button.linked-task {
 }
 /* El toggle flotante de navegación se superpone: reservar su hueco. */
 .app-shell.nav-collapsed .main-content.calendar-full {
-  padding-top: 54px;
+  padding-bottom: 54px;
 }
 @media (min-width: 901px) {
   .main-content.calendar-full {
@@ -4226,10 +4165,6 @@ button.linked-task {
 }
 .note-document .continuous-editor {
   max-width: 100%;
-}
-.note-document .editor-mode-bar {
-  border-bottom-style: dashed;
-  margin-bottom: 8px;
 }
 .note-document .editor-surface {
   grid-template-columns: minmax(0, 1fr);
@@ -4952,11 +4887,6 @@ button.linked-task {
   margin: 12px 0;
   border-radius: 8px;
 }
-.editor-attach-button {
-  display: inline-flex;
-  align-items: center;
-  color: var(--muted);
-}
 .editor-upload-error {
   color: var(--accent);
 }
@@ -5424,5 +5354,259 @@ button.linked-task {
     flex-direction: column;
     align-items: stretch;
     margin-top: 10px;
+  }
+}
+
+/* Gráfico global estilo Obsidian: lienzo a pantalla completa con panel de ajustes. */
+.notes-main--graph {
+  padding: 0;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.graph-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg);
+}
+.graph-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.graph-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
+  font-size: 12px;
+}
+.graph-hud .icon-button {
+  width: 26px;
+  height: 26px;
+}
+.graph-open-panel {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.graph-loading,
+.graph-empty {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+.graph-panel {
+  flex: 0 0 288px;
+  max-width: 288px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--sidebar);
+  padding: 12px;
+  gap: 8px;
+}
+.graph-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 8px;
+  font-size: 14px;
+}
+.graph-section {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.graph-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.graph-section-body {
+  display: grid;
+  gap: 10px;
+  padding: 4px 10px 12px;
+}
+.graph-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.graph-switch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+}
+.graph-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.graph-switch-track {
+  grid-column: 2;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+  position: relative;
+  transition: background 0.15s ease;
+}
+.graph-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel);
+  transition: transform 0.15s ease;
+}
+.graph-switch input:checked + .graph-switch-track {
+  background: var(--accent);
+}
+.graph-switch input:checked + .graph-switch-track::after {
+  transform: translateX(16px);
+}
+.graph-switch input:focus-visible + .graph-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.graph-slider {
+  display: grid;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text);
+}
+.graph-slider > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.graph-slider em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.graph-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.graph-group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.graph-group-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--text) 25%, transparent);
+}
+.graph-group-query {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.graph-group-add {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding-top: 4px;
+}
+.graph-group-add input[type="text"],
+.graph-group-add input:not([type]) {
+  min-width: 0;
+}
+.graph-group-add input {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.graph-group-add input[type="color"] {
+  width: 34px;
+  height: 32px;
+  padding: 2px;
+  cursor: pointer;
+}
+@media (max-width: 800px) {
+  .graph-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    max-width: min(288px, 86vw);
+    z-index: 20;
+    box-shadow: 0 0 0 1px var(--line), var(--shadow) 0 10px 30px;
+  }
+  .notes-main--graph {
+    position: relative;
   }
 }

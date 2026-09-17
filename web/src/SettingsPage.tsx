@@ -9,13 +9,9 @@ import { Dropdown } from "./Dropdown";
 import {
   CALENDAR_MODES,
   loadCalendarMode,
-  loadNotesPreferences,
-  loadNutritionPreferences,
   saveCalendarMode,
-  saveNotesPreferences,
-  saveNutritionPreferences,
 } from "./preferences";
-import type { CalendarMode, NutritionPreferences } from "./preferences";
+import type { CalendarMode } from "./preferences";
 
 /** Secciones del módulo global de configuración. */
 export const SETTINGS_SECTIONS = [
@@ -257,8 +253,22 @@ export function SettingsPage({
           pending={pending}
         />
       )}
-      {section === "notes" && <NotesSettings />}
-      {section === "nutrition" && <NutritionSettings />}
+      {section === "notes" && (
+        <NotesSettings
+          value={value}
+          setValue={setValue}
+          onSubmit={save}
+          pending={pending}
+        />
+      )}
+      {section === "nutrition" && (
+        <NutritionSettings
+          value={value}
+          setValue={setValue}
+          onSubmit={save}
+          pending={pending}
+        />
+      )}
       {section === "account" && (
         <SettingsCard
           onSubmit={password}
@@ -420,53 +430,64 @@ function TasksSettings({
   );
 }
 
-function NotesSettings() {
-  const [preferences, setPreferences] = useState(() =>
-    loadNotesPreferences(),
-  );
-  function update(confirmDiscard: boolean) {
-    const next = { ...preferences, confirmDiscard };
-    setPreferences(next);
-    saveNotesPreferences(next);
-  }
+function NotesSettings({
+  value,
+  setValue,
+  onSubmit,
+  pending,
+}: {
+  value: Settings;
+  setValue: (next: Settings) => void;
+  onSubmit: (event: FormEvent) => void;
+  pending: boolean;
+}) {
   return (
-    <SettingsCard title="Notas" onSubmit={() => undefined} pending={false}>
+    <SettingsCard title="Notas" onSubmit={onSubmit} pending={pending}>
       <label className="checkbox-label">
         <input
           type="checkbox"
-          checked={preferences.confirmDiscard}
-          onChange={(event) => update(event.target.checked)}
+          checked={value.notes_confirm_discard}
+          onChange={(event) =>
+            setValue({ ...value, notes_confirm_discard: event.target.checked })
+          }
         />
         Confirmar antes de descartar cambios sin guardar
       </label>
       <p className="muted">
-        Se guarda en este navegador. Los documentos se guardan automáticamente
-        mientras escribes.
+        Los documentos se guardan automáticamente mientras escribes.
       </p>
+      <button className="primary" disabled={pending}>
+        Guardar preferencias
+      </button>
     </SettingsCard>
   );
 }
 
-function NutritionSettings() {
-  const [preferences, setPreferences] = useState(() =>
-    loadNutritionPreferences(),
-  );
-  function updateUnit(unit: NutritionPreferences["defaultBaseUnit"]) {
-    const next = { ...preferences, defaultBaseUnit: unit };
-    setPreferences(next);
-    saveNutritionPreferences(next);
-  }
+function NutritionSettings({
+  value,
+  setValue,
+  onSubmit,
+  pending,
+}: {
+  value: Settings;
+  setValue: (next: Settings) => void;
+  onSubmit: (event: FormEvent) => void;
+  pending: boolean;
+}) {
   return (
     <>
-      <SettingsCard title="Nutrición" onSubmit={() => undefined} pending={false}>
+      <SettingsCard title="Nutrición" onSubmit={onSubmit} pending={pending}>
         <label>
           Unidad base predeterminada al crear alimentos
           <Dropdown
             ariaLabel="Unidad base predeterminada"
-            value={preferences.defaultBaseUnit}
+            value={value.nutrition_base_unit}
             searchable={false}
             onChange={(next) =>
-              updateUnit(next as NutritionPreferences["defaultBaseUnit"])
+              setValue({
+                ...value,
+                nutrition_base_unit: next as Settings["nutrition_base_unit"],
+              })
             }
             options={[
               { value: "g", label: "Gramos (g)" },
@@ -475,7 +496,9 @@ function NutritionSettings() {
             ]}
           />
         </label>
-        <p className="muted">Se guarda en este navegador.</p>
+        <button className="primary" disabled={pending}>
+          Guardar preferencias
+        </button>
       </SettingsCard>
       <SettingsCard
         title="Objetivos diarios"

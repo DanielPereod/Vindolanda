@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, Star, Trash2, Globe } from "lucide-react";
 import { api, errorMessage, useResource } from "./api";
-import type { Food, FoodInput } from "./types";
+import type { Food, FoodInput, Settings } from "./types";
 import { FoodForm } from "./FoodForm";
 import { OpenFoodFactsSearch } from "./OpenFoodFactsSearch";
 import { Modal } from "./Modal";
@@ -33,6 +33,7 @@ export function FoodsPage() {
   const path = `/nutrition/foods${params.toString() ? `?${params}` : ""}`;
   const foods = useResource<Food[]>(path);
   const values = foods.data ?? [];
+  const settings = useResource<Settings>("/settings");
 
   async function run(operation: () => Promise<unknown>) {
     setPending(true);
@@ -203,6 +204,7 @@ export function FoodsPage() {
         >
           <FoodForm
             food={editing}
+            defaultBaseUnit={settings.data?.nutrition_base_unit ?? "g"}
             pending={pending}
             onCancel={closeForm}
             onSubmit={save}
