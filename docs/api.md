@@ -14,7 +14,7 @@ All mutations, including login, require an `Origin` header exactly matching `APP
 | PUT | `/auth/password` | `{current_password,new_password}`; revokes every session; 204 |
 | DELETE | `/auth/sessions` | Revokes every session including the current one; 204 |
 
-Passwords require 12–72 bytes and are hashed with bcrypt cost 12. Tokens contain 32 cryptographically random bytes; the database only stores SHA-256 hashes. Login allows ten attempts per minute per API process (one-account installation).
+Passwords require between `PASSWORD_MIN_LENGTH` (default 12) and 72 bytes and are hashed with bcrypt cost 12. Tokens contain 32 cryptographically random bytes; the database only stores SHA-256 hashes. Login allows ten attempts per minute per API process (one-account installation).
 
 ## Projects, sections and labels
 
@@ -89,7 +89,7 @@ Today and Upcoming sort by date, time (untimed last), priority and manual positi
 
 ## Settings
 
-`GET /settings` returns preferences. `PUT /settings` accepts any subset of known preference fields, preserving the others: `timezone`, `language` (`es` in the MVP), `week_start` (0/1), `hour_format` (12/24 as strings), `date_format` (`DD/MM/YYYY`/`YYYY-MM-DD`), `theme` (`light`/`dark`/`system`), `accent_color` (one of the supported palette values), `default_sort`, `browser_notifications`, `notes_confirm_discard`, `nutrition_base_unit` (`g`/`ml`/`unit`).
+`GET /settings` returns preferences. `PUT /settings` accepts any subset of known preference fields, preserving the others: `timezone`, `language` (`es` in the MVP), `week_start` (0/1), `hour_format` (12/24 as strings), `date_format` (`DD/MM/YYYY`/`YYYY-MM-DD`), `theme` (`light`/`dark`/`system`), `accent_color` (any `#rrggbb` hex, presets are only suggestions), `default_sort`, `browser_notifications`, `notes_confirm_discard`, `nutrition_base_unit` (`g`/`ml`/`unit`), `font_family` (`system`/`sans`/`serif`/`mono`/`rounded`), `font_size` (12–18), `custom_colors` plus the eight palette colors `light_bg`, `light_panel`, `light_line`, `light_text`, `dark_bg`, `dark_panel`, `dark_line`, `dark_text` (each `#rrggbb`), `reduce_motion` and `reduce_shadows`.
 
 The notification preference is reserved for the reminder phase; the MVP does not deliver notifications. Week-start is stored for the future calendar. Unknown JSON fields are rejected.
 

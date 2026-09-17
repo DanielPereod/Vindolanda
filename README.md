@@ -10,7 +10,8 @@ A single-user personal task manager with a modular Go API, PostgreSQL persistenc
 - Four priorities, scheduled dates and times, global labels and Markdown descriptions.
 - Inbox, Today with overdue tasks, Upcoming (7/14/30 days), completed tasks and global search.
 - Responsive list interface, pointer/keyboard drag-and-drop, explicit move controls, Quick Add (`Q`) with Todoist-style syntax, search (`Ctrl/Cmd+K`) and modal dismissal (`Esc`).
-- Account timezone, date/time format, appearance and default sort settings.
+- Account timezone, date/time format and default sort settings.
+- Appearance settings: theme, accent color including a custom hex picker, typography (family and size), per-theme custom background/surface/border/text palettes and reduced motion/shadows.
 
 Recurrence, deadlines, duration, reminders, saved filter expressions and board/calendar views belong to subsequent phases. Training and other future domains are intentionally not implemented.
 
@@ -27,7 +28,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Open [Personal Life locally](http://localhost:5173). To create the first account, run the one-time provisioning command with a password supplied only through the shell. The password must contain 12–72 bytes.
+Open [Personal Life locally](http://localhost:5173). To create the first account, run the one-time provisioning command with a password supplied only through the shell. The password must contain at least `PASSWORD_MIN_LENGTH` bytes (default 12) and at most 72.
 
 In Bash:
 

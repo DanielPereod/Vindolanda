@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
+	"os"
 	"personal-life/api/internal/core"
+	"strconv"
 	"strings"
 )
 
@@ -34,9 +37,27 @@ func Provision(requestContext context.Context, pool *pgxpool.Pool, username, pas
 	})
 	return operationError
 }
+
+const (
+	defaultPasswordMinBytes = 12
+	maxPasswordBytes        = 72
+)
+
+// passwordMinBytes allows a self-hosted installation to opt into a different
+// minimum through PASSWORD_MIN_LENGTH. It defaults to 12 bytes.
+func passwordMinBytes() int {
+	if value := os.Getenv("PASSWORD_MIN_LENGTH"); value != "" {
+		if parsed, parseError := strconv.Atoi(value); parseError == nil && parsed >= 1 && parsed <= maxPasswordBytes {
+			return parsed
+		}
+	}
+	return defaultPasswordMinBytes
+}
+
 func validatePassword(password string) error {
-	if len(password) < 12 || len(password) > 72 {
-		return core.Invalid("Password must contain 12–72 bytes")
+	minimum := passwordMinBytes()
+	if len(password) < minimum || len(password) > maxPasswordBytes {
+		return core.Invalid(fmt.Sprintf("Password must contain %d–%d bytes", minimum, maxPasswordBytes))
 	}
 	return nil
 }
