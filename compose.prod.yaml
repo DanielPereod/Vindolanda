@@ -51,6 +51,7 @@ services:
       # Set to true only behind HTTPS (reverse proxy).
       COOKIE_SECURE: "false"
       INITIAL_USERNAME: owner
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
       OPENFOODFACTS_USER_AGENT: personal-life/0.1
     links:
       - postgres

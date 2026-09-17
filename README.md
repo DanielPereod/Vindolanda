@@ -91,6 +91,7 @@ Copy `compose.prod.yaml` and `.env.example` to a directory on the server, create
 
 - `POSTGRES_PASSWORD`: a long random password.
 - `APP_ORIGIN`: the exact URL the browser uses, e.g. `http://192.168.1.50:8090`. It must match byte for byte, or CSRF-protected writes and login are rejected.
+- Optional `PASSWORD_MIN_LENGTH`: minimum password length in bytes (default 12). Lower it only if you accept weaker passwords.
 
 Image tags, the published port (`8090`), `COOKIE_SECURE` and `INITIAL_USERNAME` are literal values inside `compose.prod.yaml`; edit that file to pin a version, change the port or set `COOKIE_SECURE=true` behind HTTPS.
 
