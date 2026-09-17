@@ -761,6 +761,9 @@ function ExplorerConfirmDialog({
   );
 }
 
+const kindIcons = { note: FileText, base: Table2, canvas: Network } as const;
+const kindBadges = { base: "BASE", canvas: "CANVAS" } as const;
+
 function DraggableNote({
   note,
   onContextMenu,
@@ -775,6 +778,8 @@ function DraggableNote({
   const navigate = useNavigate();
   const location = useLocation();
   const active = location.pathname === `/notes/${note.id}`;
+  const KindIcon = kindIcons[note.kind] ?? FileText;
+  const badge = kindBadges[note.kind as keyof typeof kindBadges];
   return (
     <button
       ref={setNodeRef}
@@ -795,7 +800,15 @@ function DraggableNote({
       {...listeners}
       {...attributes}
     >
-      <span>{note.title}</span>
+      <span className="explorer-note-icon" aria-hidden="true">
+        <KindIcon size={14} />
+      </span>
+      <span className="explorer-note-title">{note.title}</span>
+      {badge && (
+        <span className="explorer-note-kind" aria-hidden="true">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

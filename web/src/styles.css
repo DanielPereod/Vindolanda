@@ -1487,6 +1487,7 @@ details p {
 }
 .note-explorer {
   font-size: 13px;
+  color: var(--text);
 }
 .explorer-toolbar {
   position: sticky;
@@ -1494,10 +1495,10 @@ details p {
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 8px;
   margin: 0;
-  padding: 18px 0 10px;
+  padding: 16px 2px 10px;
   background: var(--sidebar);
 }
 .explorer-title {
@@ -1578,39 +1579,60 @@ details p {
 .explorer-note-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  padding: 4px 7px;
+  padding: 5px 8px;
   border: 0;
   background: transparent;
-  color: inherit;
+  color: var(--muted);
   font: inherit;
   text-align: left;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: grab;
   transition:
     background 120ms ease,
-    box-shadow 120ms ease,
     color 120ms ease;
 }
-.explorer-note-row span {
+.explorer-note-icon {
+  display: inline-flex;
+  flex: none;
+  opacity: 0.85;
+}
+.explorer-note-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.explorer-note-kind {
+  flex: none;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.6;
 }
 .explorer-note-row:active {
   cursor: grabbing;
 }
 .explorer-note-row:hover,
 .explorer-note-row:focus-visible {
-  background: var(--accent-soft);
-  box-shadow: inset 2px 0 0 var(--accent);
-  color: var(--accent);
+  background: var(--soft);
+  color: var(--text);
   outline: none;
 }
+.explorer-note-row:hover .explorer-note-icon,
+.explorer-note-row:focus-visible .explorer-note-icon {
+  opacity: 1;
+}
 .explorer-note-row.active {
-  background: var(--soft);
+  background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 550;
+}
+.explorer-note-row.active .explorer-note-icon {
+  opacity: 1;
 }
 .explorer-note-row.active:hover,
 .explorer-note-row.active:focus-visible {
@@ -1776,8 +1798,9 @@ details p {
 .folder-heading {
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: 5px;
   cursor: grab;
+  color: var(--text);
 }
 .folder-heading:active {
   cursor: grabbing;
@@ -1789,22 +1812,34 @@ details p {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   text-align: left;
+  font-weight: 550;
 }
 .folder-heading button {
   background: transparent;
   border: 0;
-  padding: 4px 6px;
-  border-radius: 4px;
+  padding: 5px 8px;
+  border-radius: 5px;
   font-size: 13px;
   color: inherit;
+}
+.folder-heading button > svg {
+  flex: none;
+  color: var(--muted);
 }
 .folder-heading button:hover {
   background: var(--soft);
 }
+.folder-heading button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .folder-children {
-  margin-left: 13px;
+  margin-left: 14px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
 }
 .note-trash {
   display: flex;

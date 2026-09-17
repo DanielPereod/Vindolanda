@@ -1,26 +1,27 @@
 # Production stack that runs the images published to GHCR by
 # .github/workflows/docker-publish.yml. Nothing is compiled on the host, so it
-# works with plain Docker Compose on any server (VPS, home server, CasaOS, ...).
+# works with plain Docker Compose on any server (VPS, home server, NAS, ...)
+# and can be imported as a custom app in CasaOS.
 #
 #   cp .env.example .env   # then set POSTGRES_PASSWORD and APP_ORIGIN
-#   docker compose --env-file .env -f compose.prod.yaml pull
 #   docker compose --env-file .env -f compose.prod.yaml up -d
 #
 # Required variables: POSTGRES_PASSWORD and APP_ORIGIN.
 # APP_ORIGIN must be the exact URL the browser uses, e.g. http://192.168.1.50:8090
-# If you serve the app over plain HTTP, set COOKIE_SECURE=false; set it to true
-# only behind HTTPS (reverse proxy).
+# The image references and the published port are literal on purpose: CasaOS's
+# importer cannot parse ${...} inside `image:` or `ports:`. Change them here if
+# you need a different tag, registry or host port.
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-personal_life}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: personal_life
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-personal_life}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d personal_life"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -29,24 +30,25 @@ services:
   # One-shot job: applies embedded Goose migrations, then exits 0.
   # It re-runs on every `up` and is idempotent; the API waits for it.
   migrate:
-    image: ${API_IMAGE:-ghcr.io/danielpereod/vindolanda-api}:${IMAGE_TAG:-latest}
+    image: ghcr.io/danielpereod/vindolanda-api:latest
     command: ["migrate"]
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-personal_life}?sslmode=disable
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/personal_life?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
 
   api:
-    image: ${API_IMAGE:-ghcr.io/danielpereod/vindolanda-api}:${IMAGE_TAG:-latest}
+    image: ghcr.io/danielpereod/vindolanda-api:latest
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-personal_life}?sslmode=disable
-      APP_ORIGIN: ${APP_ORIGIN:?APP_ORIGIN is required}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/personal_life?sslmode=disable
+      APP_ORIGIN: ${APP_ORIGIN}
       LISTEN_ADDR: 0.0.0.0:8080
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      INITIAL_USERNAME: ${INITIAL_USERNAME:-owner}
-      OPENFOODFACTS_USER_AGENT: ${OPENFOODFACTS_USER_AGENT:-personal-life/0.1}
+      # Set to true only behind HTTPS (reverse proxy).
+      COOKIE_SECURE: "false"
+      INITIAL_USERNAME: owner
+      OPENFOODFACTS_USER_AGENT: personal-life/0.1
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -59,12 +61,12 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${WEB_IMAGE:-ghcr.io/danielpereod/vindolanda-web}:${IMAGE_TAG:-latest}
+    image: ghcr.io/danielpereod/vindolanda-web:latest
     depends_on:
       api:
         condition: service_started
     ports:
-      - "${WEB_PORT:-8090}:80"
+      - "8090:80"
     restart: unless-stopped
 
 volumes:

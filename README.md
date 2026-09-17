@@ -90,8 +90,8 @@ Copy `compose.prod.yaml` and `.env.example` to a directory on the server, create
 
 - `POSTGRES_PASSWORD`: a long random password.
 - `APP_ORIGIN`: the exact URL the browser uses, e.g. `http://192.168.1.50:8090`. It must match byte for byte, or CSRF-protected writes and login are rejected.
-- `COOKIE_SECURE`: leave `false` over plain HTTP; set `true` only behind HTTPS.
-- `WEB_PORT`: host port for the web container (default `8090`).
+
+Image tags, the published port (`8090`), `COOKIE_SECURE` and `INITIAL_USERNAME` are literal values inside `compose.prod.yaml`; edit that file to pin a version, change the port or set `COOKIE_SECURE=true` behind HTTPS.
 
 Then start the stack:
 
@@ -99,7 +99,7 @@ Then start the stack:
 docker compose --env-file .env -f compose.prod.yaml up -d
 ```
 
-On CasaOS you can paste the same file in **+ → Install a custom app** and set the variables there.
+On CasaOS you can paste the same file in **+ → Install a custom app** and set the variables there. The image references and the port are literals on purpose, because the CasaOS importer cannot parse `${...}` inside `image:` or `ports:`.
 
 The published packages are private by default, so the host must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
 
@@ -107,7 +107,7 @@ The published packages are private by default, so the host must authenticate bef
 echo "$GHCR_TOKEN" | docker login ghcr.io -u DanielPereod --password-stdin
 ```
 
-To allow anonymous pulls, set both packages to public under the repository's **Packages** settings (`vindolanda-api`, `vindolanda-web`); they contain only application code. You can also override the image locations with `API_IMAGE` and `WEB_IMAGE`, which is useful for forks.
+To allow anonymous pulls, set both packages to public under the repository's **Packages** settings (`vindolanda-api`, `vindolanda-web`); they contain only application code.
 
 Create the only account once, passing the password through the shell so it is not stored in Compose configuration:
 
@@ -124,7 +124,7 @@ docker compose --env-file .env -f compose.prod.yaml pull
 docker compose --env-file .env -f compose.prod.yaml up -d
 ```
 
-Pin a release with `IMAGE_TAG=v1.0.0` in `.env` instead of `latest`.
+Pin a release by replacing `latest` with a version tag in the two `image:` lines of `compose.prod.yaml`.
 
 ### Database migrations
 
