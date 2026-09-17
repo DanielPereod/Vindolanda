@@ -77,49 +77,51 @@ Open [Personal Life locally](http://localhost:5173). Use `localhost` consistentl
 
 For HTTPS hosting later, set `APP_ORIGIN` to the exact public origin, retain the default `COOKIE_SECURE=true`, serve the frontend with SPA fallback and route `/api` to the API.
 
-## Self-hosting on CasaOS
+## Self-hosting with Docker Compose
 
 [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) builds and publishes both images to the GitHub Container Registry automatically on every push to `main`, on `v*` tags and on manual dispatch:
 
 - `ghcr.io/danielpereod/vindolanda-api`
 - `ghcr.io/danielpereod/vindolanda-web`
 
-`compose.casaos.yaml` consumes those images, so nothing is compiled on the server. The stack includes PostgreSQL, a one-shot migration job and the API and web containers.
+`compose.prod.yaml` runs those prebuilt images, so nothing is compiled on the host. It is a plain Docker Compose file that works on any server (VPS, home server, NAS, or a CasaOS custom app) and includes PostgreSQL, a one-shot migration job and the API and web containers.
 
-Because the repository is private, the published packages are private as well and the server must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
-
-```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io -u DanielPereod --password-stdin
-```
-
-CasaOS pulls images with the same Docker daemon, so that login is enough. If you prefer anonymous pulls, set both packages to public under the repository's **Packages** settings (`vindolanda-api`, `vindolanda-web`); they contain only application code.
-
-In CasaOS, use **+ → Install a custom app** and paste `compose.casaos.yaml`, then set at least:
+Copy `compose.prod.yaml` and `.env.example` to a directory on the server, create `.env` and set at least:
 
 - `POSTGRES_PASSWORD`: a long random password.
 - `APP_ORIGIN`: the exact URL the browser uses, e.g. `http://192.168.1.50:8090`. It must match byte for byte, or CSRF-protected writes and login are rejected.
 - `COOKIE_SECURE`: leave `false` over plain HTTP; set `true` only behind HTTPS.
 - `WEB_PORT`: host port for the web container (default `8090`).
 
-From a shell on the server, copy the file from this repository and run:
+Then start the stack:
 
 ```bash
-docker compose --env-file .env -f compose.casaos.yaml up -d
+docker compose --env-file .env -f compose.prod.yaml up -d
 ```
+
+On CasaOS you can paste the same file in **+ → Install a custom app** and set the variables there.
+
+The published packages are private by default, so the host must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u DanielPereod --password-stdin
+```
+
+To allow anonymous pulls, set both packages to public under the repository's **Packages** settings (`vindolanda-api`, `vindolanda-web`); they contain only application code. You can also override the image locations with `API_IMAGE` and `WEB_IMAGE`, which is useful for forks.
 
 Create the only account once, passing the password through the shell so it is not stored in Compose configuration:
 
 ```bash
 read -rsp 'Initial password (12–72 bytes): ' INITIAL_PASSWORD; echo
-docker compose --env-file .env -f compose.casaos.yaml run --rm -e INITIAL_PASSWORD="$INITIAL_PASSWORD" api provision
+docker compose --env-file .env -f compose.prod.yaml run --rm -e INITIAL_PASSWORD="$INITIAL_PASSWORD" api provision
 unset INITIAL_PASSWORD
 ```
 
 Upgrade to the latest published images with:
 
 ```bash
-docker compose --env-file .env -f compose.casaos.yaml pull
-docker compose --env-file .env -f compose.casaos.yaml up -d
+docker compose --env-file .env -f compose.prod.yaml pull
+docker compose --env-file .env -f compose.prod.yaml up -d
 ```
 
 Pin a release with `IMAGE_TAG=v1.0.0` in `.env` instead of `latest`.
@@ -133,7 +135,7 @@ Migrations live in `api/migrations` as versioned Goose SQL and are embedded into
 - Migrations are forward-only in this deployment; there is no automatic rollback. Before upgrading, take a backup so you can restore the previous state if a release is not compatible:
 
 ```bash
-docker compose --env-file .env -f compose.casaos.yaml exec -T postgres \
+docker compose --env-file .env -f compose.prod.yaml exec -T postgres \
   pg_dump -U postgres personal_life > "backup-$(date +%F).sql"
 ```
 
