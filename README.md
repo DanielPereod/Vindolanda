@@ -75,7 +75,61 @@ make dev-web
 
 Open [Personal Life locally](http://localhost:5173). Use `localhost` consistently: the trusted browser origin defaults to `http://localhost:5173`. Vite proxies `/api` to the Go server at `127.0.0.1:8080`. `GET /health` checks database connectivity.
 
-For HTTPS hosting later, set `APP_ORIGIN` to the exact public origin, retain the default `COOKIE_SECURE=true`, serve the frontend with SPA fallback and route `/api` to the API. No production deployment is included.
+For HTTPS hosting later, set `APP_ORIGIN` to the exact public origin, retain the default `COOKIE_SECURE=true`, serve the frontend with SPA fallback and route `/api` to the API.
+
+## Self-hosting on CasaOS
+
+[`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml) builds and publishes both images to the GitHub Container Registry automatically on every push to `main`, on `v*` tags and on manual dispatch:
+
+- `ghcr.io/danielpereod/vindolanda-api`
+- `ghcr.io/danielpereod/vindolanda-web`
+
+`compose.casaos.yaml` consumes those images, so nothing is compiled on the server. The stack includes PostgreSQL, a one-shot migration job and the API and web containers.
+
+In CasaOS, use **+ → Install a custom app** and paste `compose.casaos.yaml`, then set at least:
+
+- `POSTGRES_PASSWORD`: a long random password.
+- `APP_ORIGIN`: the exact URL the browser uses, e.g. `http://192.168.1.50:8090`. It must match byte for byte, or CSRF-protected writes and login are rejected.
+- `COOKIE_SECURE`: leave `false` over plain HTTP; set `true` only behind HTTPS.
+- `WEB_PORT`: host port for the web container (default `8090`).
+
+From a shell on the server, copy the file from this repository and run:
+
+```bash
+docker compose --env-file .env -f compose.casaos.yaml up -d
+```
+
+Create the only account once, passing the password through the shell so it is not stored in Compose configuration:
+
+```bash
+read -rsp 'Initial password (12–72 bytes): ' INITIAL_PASSWORD; echo
+docker compose --env-file .env -f compose.casaos.yaml run --rm -e INITIAL_PASSWORD="$INITIAL_PASSWORD" api provision
+unset INITIAL_PASSWORD
+```
+
+Upgrade to the latest published images with:
+
+```bash
+docker compose --env-file .env -f compose.casaos.yaml pull
+docker compose --env-file .env -f compose.casaos.yaml up -d
+```
+
+Pin a release with `IMAGE_TAG=v1.0.0` in `.env` instead of `latest`.
+
+### Database migrations
+
+Migrations live in `api/migrations` as versioned Goose SQL and are embedded into the API binary, so the image always carries the migrations that match its code. The `migrate` service runs the same image with the `migrate` command before the API starts:
+
+- On `up`, Compose starts `migrate`, waits for it to exit successfully (`service_completed_successfully`) and only then starts `api`. If a migration fails, the API is never started and existing data is left untouched.
+- Goose records applied versions in the `goose_db_version` table, so the job is idempotent: it applies only what is pending and exits immediately when the schema is current.
+- Migrations are forward-only in this deployment; there is no automatic rollback. Before upgrading, take a backup so you can restore the previous state if a release is not compatible:
+
+```bash
+docker compose --env-file .env -f compose.casaos.yaml exec -T postgres \
+  pg_dump -U postgres personal_life > "backup-$(date +%F).sql"
+```
+
+The migration step is intentionally decoupled from the API process, so it runs once per deployment rather than on every container restart, and it can be re-run safely at any time.
 
 ## Verification
 
