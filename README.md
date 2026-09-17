@@ -86,6 +86,14 @@ For HTTPS hosting later, set `APP_ORIGIN` to the exact public origin, retain the
 
 `compose.casaos.yaml` consumes those images, so nothing is compiled on the server. The stack includes PostgreSQL, a one-shot migration job and the API and web containers.
 
+Because the repository is private, the published packages are private as well and the server must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u DanielPereod --password-stdin
+```
+
+CasaOS pulls images with the same Docker daemon, so that login is enough. If you prefer anonymous pulls, set both packages to public under the repository's **Packages** settings (`vindolanda-api`, `vindolanda-web`); they contain only application code.
+
 In CasaOS, use **+ → Install a custom app** and paste `compose.casaos.yaml`, then set at least:
 
 - `POSTGRES_PASSWORD`: a long random password.
