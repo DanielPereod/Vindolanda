@@ -99,9 +99,15 @@ Then start the stack:
 docker compose --env-file .env -f compose.prod.yaml up -d
 ```
 
-On CasaOS you can paste the same file in **+ → Install a custom app** and set the variables there. The image references and the port are literals on purpose, because the CasaOS importer cannot parse `${...}` inside `image:` or `ports:`.
+On CasaOS the recommended way is the app-management CLI, which installs the compose as written:
 
-The published packages are private by default, so the host must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
+```bash
+casaos-cli app-management install -f compose.prod.yaml
+```
+
+You can also paste the file in **+ → Install a custom app**. The image references and the port are literals on purpose, because the importer cannot parse `${...}` inside `image:` or `ports:`. That importer also forces `network_mode: bridge`, where Docker does not resolve service names; the `links` entries in this file provide name resolution so the migration job can reach `postgres` and the web container can reach `api`.
+
+If the packages are private, the host must authenticate before pulling. Log in once with a classic personal access token that has the `read:packages` scope:
 
 ```bash
 echo "$GHCR_TOKEN" | docker login ghcr.io -u DanielPereod --password-stdin
